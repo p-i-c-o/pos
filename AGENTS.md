@@ -23,7 +23,7 @@ These instructions apply to the entire POS repository. Read `README.md` for the 
 
 ## 3. Technical direction
 
-- The planned stack is Rust, a lightweight Crossterm-based TUI, Clap CLI, Axum server, PostgreSQL server storage and SQLite local storage.
+- The stack is Rust, Ratatui with a Crossterm terminal backend, a scriptable POS CLI, and planned Axum server, PostgreSQL server storage and SQLite local storage. Clap is an option for future CLI parsing.
 - This is a documented design direction, not permission to add dependencies or create the entire stack at once.
 - Prefer simple, maintainable, idiomatic Rust and lightweight established libraries.
 - Keep data model, storage and UI concerns separated; do not block keyboard input on network operations.

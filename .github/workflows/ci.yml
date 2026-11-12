@@ -21,7 +21,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Build workspace
         run: cargo build --workspace --locked
-      - name: Smoke test both binaries
+      - name: Smoke test noninteractive CLI and server
         run: |
-          cargo run --quiet --locked -p pos-cli --bin pos | grep -F "scaffold"
-          cargo run --quiet --locked -p pos-server | grep -F "scaffold"
+          cargo run --quiet --locked -p pos-cli --bin pos -- --help | grep -F "Launch the interactive terminal UI"
+          cargo run --quiet --locked -p pos-cli --bin pos -- --version | grep -F "POS 0.0.0"
+          cargo run --quiet --locked -p pos-server | grep -F "server scaffold"

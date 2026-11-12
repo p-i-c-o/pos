@@ -13,4 +13,4 @@ Keep storage, network connections and business rules out of rendering. Do not bl
 ## Verification
 
 Future tests should cover navigation, rendering and terminal cleanup.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+The Ratatui terminal shell is implemented. All operational modules remain placeholders; do not imply they work.
