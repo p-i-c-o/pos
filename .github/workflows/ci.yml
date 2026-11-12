@@ -12,6 +12,19 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pos_ci
+          POSTGRES_PASSWORD: pos_ci_ephemeral_only
+          POSTGRES_DB: pos_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pos_ci -d pos_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Validate GitFlow PR target
         if: github.event_name == 'pull_request'
@@ -35,6 +48,10 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --workspace --locked
+      - name: Test PostgreSQL connection, concurrency and migrations
+        env:
+          POS_TEST_DATABASE_URL: postgres://pos_ci:pos_ci_ephemeral_only@127.0.0.1:5432/pos_ci?sslmode=disable
+        run: cargo test -p pos-postgres --test postgres --locked -- --nocapture
       - name: Build workspace
         run: cargo build --workspace --locked
       - name: Smoke test CLI, SQLite Tasks and server
