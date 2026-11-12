@@ -13,4 +13,4 @@ Do not implement module business rules here. Route operations through shared cor
 ## Verification
 
 Future tests should cover argument parsing, exit codes and non-interactive output.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+The pos executable can launch the Ratatui shell and expose help/version; operational commands remain unimplemented.

@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Architecture and planning. A compiling Rust workspace scaffold exists, but no POS features or server services are implemented.
+**Status:** Early implementation. The POS client has a working Ratatui terminal shell, but no operational modules, storage or server services are implemented.
 
 ## Overview
 
@@ -78,12 +78,15 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Scaffold only.** The two executables print placeholder messages; no actual POS commands, TUI screens, server listeners or storage backends exist yet.
+**TUI shell only.** The POS client launches an interactive Ratatui screen in a terminal. All operational modules remain placeholders; no server listeners or storage backends exist yet.
+
+TUI shortcuts: `j/k`, `arrow keys`, `?`, `q`, `Esc`, `Ctrl+C` for navigation, help and exiting (as shown on screen).
 
 Install Rust through rustup if needed. The repository's rust-toolchain.toml selects Rust 1.99.1 with rustfmt and Clippy.
 
 ```sh
 cargo run --locked -p pos-cli --bin pos
+cargo run --locked -p pos-cli --bin pos -- --help
 cargo run --locked -p pos-server
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
@@ -91,10 +94,9 @@ cargo test --workspace --locked
 cargo build --workspace --locked
 ```
 
-Future POS commands (illustrative, **not implemented**):
+Future POS feature commands (illustrative, **not implemented**):
 
 ```sh
-pos
 pos tasks
 pos projects
 pos tasks add "Review report" --project university
@@ -150,7 +152,7 @@ pos/
     └── pos-gitlab/
 ```
 
-Crates currently contain minimal compiling placeholders, not functional implementations. AI and advanced automation crates are intentionally absent.
+The pos-tui crate implements the interactive Ratatui shell; most crates remain compiling placeholders. AI and advanced automation crates are intentionally absent.
 
 ## Docs
 
@@ -201,7 +203,7 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Layer | Candidate |
 | --- | --- |
 | Main implementation | Rust workspace |
-| Terminal | Crossterm, minimal custom renderer |
+| Terminal | Ratatui 0.30.2 with Crossterm 0.29 backend (initial shell implemented) |
 | CLI | Clap |
 | Server API | Axum |
 | Databases | PostgreSQL (server), SQLite (client) |
@@ -228,8 +230,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** The 27-crate Rust workspace, placeholder executables, agent instructions and GitHub Actions CI configuration.
-- **What doesn't (yet):** No usable TUI, commands, server listener, database schema, synchronisation or other application functionality is implemented.
+- **What works:** The 27-crate Rust workspace, functional Ratatui terminal shell, CLI help/version, server placeholder, agent instructions and GitHub Actions CI configuration.
+- **What doesn't (yet):** No working feature commands, server listener, database schema, synchronisation or other operational application functionality is implemented.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -237,7 +239,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
 - **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
-- **Software:** Compiling client and server placeholders only; no installation or production deployment is supported.
+- **Software:** Interactive POS TUI shell and server placeholder only; no installation or production deployment is supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
 ## How to Contribute
