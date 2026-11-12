@@ -275,6 +275,12 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 - **Software:** Interactive local POS Tasks and Projects plus a placeholder server; no installation or production multiuser deployment is supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
+## Branching and releases
+
+POS uses **lightweight GitFlow**: `main` is the stable release branch, while `develop` is the integration branch for upcoming work. Features and routine fixes branch from `develop` and merge via PR into `develop`. Temporary `release/*` branches are cut from `develop` and merged into `main` for releases; urgent `hotfix/*` branches originate from `main`. Release and hotfix changes also flow back into `develop`.
+
+Both permanent branches require a PR and passing CI. Release tags (`vX.Y.Z`) point to commits on `main`; no release has been tagged yet. See [Git workflow and examples](docs/git-workflow.md) for branching commands, PR targets, release and hotfix procedures.
+
 ## How to Contribute
 
 POS is in early implementation. Use repository issues to propose changes or identify requirements. Before larger code contributions, agree on module boundaries, data models and security impact. Keep changes focused, documented and tested; never commit credentials.
