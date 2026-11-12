@@ -65,7 +65,10 @@ jobs:
           ./target/debug/pos data restore "$TEST_DIR/backup.sqlite3" --output "$TEST_DIR/recovered.sqlite3"
           ./target/debug/pos --db "$TEST_DIR/recovered.sqlite3" data check | grep -F 'integrity and foreign keys OK'
           ./target/debug/pos --db "$TEST_DIR/recovered.sqlite3" tasks list --all | grep -F 'CI task'
-          ./target/debug/pos-server | grep -F "server scaffold"
+          ./target/debug/pos-server --version | grep -F "pos-server 0.1.0"
+
+      - name: Smoke test local-only HTTP server and lifecycle
+        run: python3 scripts/server-smoke.py ./target/debug/pos-server
 
       - name: Verify optimized release candidate and safe local installation
         if: startsWith(github.ref, 'refs/heads/release/') || startsWith(github.head_ref, 'release/')

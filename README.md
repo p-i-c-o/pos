@@ -34,13 +34,13 @@
   <!-- <img alt="Category: Research" src="https://img.shields.io/badge/Category-Research-7c3aed"> -->
   <!-- <img alt="Category: School" src="https://img.shields.io/badge/Category-School-ff69b4"> -->
   <!-- META BADGES: update active version/date values as needed -->
-  <img alt="Release candidate: 0.1.0" src="https://img.shields.io/badge/Version-0.1.0--rc-orange">
+  <img alt="Version: 0.1.0" src="https://img.shields.io/badge/Version-0.1.0-blue">
   <img alt="Updated: 2026-11-12" src="https://img.shields.io/badge/Updated-2026--11--12-brightgreen">
   <!-- <img alt="Version" src="https://img.shields.io/badge/Version-x.x.x-orange"> -->
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server and other modules remain placeholders.
+**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server now has development-only loopback health endpoints; data APIs, authentication and synchronization are not implemented.
 
 ## Overview
 
@@ -78,11 +78,11 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. The server, multiuser permissions and cross-device synchronisation are **not implemented**.
+**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. On develop, the server has a loopback-only health endpoint; multiuser permissions, business-data HTTP APIs and cross-device synchronisation are **not implemented**.
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
-**Local Linux installation (release candidate):**
+**Local Linux installation:**
 
 ```sh
 bash scripts/install-local.sh
@@ -97,7 +97,7 @@ silently overwrites an existing executable. It does not change PATH, require
 sudo, or modify the SQLite database. An upgrade can apply SQLx migrations
 when POS next starts, so back up existing data beforehand. See
 [installation and release notes](docs/releases/0.1.0.md).
-For the unreleased candidate, you can also build and run POS directly:
+To build and run POS directly from the current checkout:
 
 ```sh
 cargo build --locked -p pos-cli
@@ -288,11 +288,11 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Background work | Rust scheduler/worker and persistent database-backed jobs |
 | Service supervision | systemd on Linux |
 
-Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. Server components remain planned. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
+Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server now provides loopback-only HTTP health/lifecycle infrastructure, but no business-data endpoints, authentication or persistence. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
 
 ## Roadmap
 
-- [ ] **v0.1 - Local prototype:** Release candidate prepared with TUI, CLI, local SQLite, tasks and projects; awaiting release PR merge and tag.
+- [x] **v0.1 - Local prototype:** Tagged v0.1.0 release with TUI, CLI, local SQLite, tasks and projects.
 - [ ] **v0.2 - Connectivity:** Server API, accounts, device identity and basic synchronisation.
 - [ ] **v0.3 - Shared information:** Notes, files, entity relationships and universal search.
 - [ ] **v0.4 - Planning:** Calendar, reminders and background jobs.
@@ -307,8 +307,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks and CI.
-- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, a server listener, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback-only HTTP health server (develop only) and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server data APIs, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -316,8 +316,25 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
 - **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
-- **Software:** Local POS Tasks and Projects with an optional source-built Linux client installer; no binary packages, running server or production multiuser deployment are supported.
+- **Software:** Local POS Tasks and Projects with an optional source-built Linux client installer; no binary packages or production multiuser deployment are supported. The development HTTP server is local-only and health-only.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
+
+## Development HTTP server (Phase 8)
+
+The server is a separate executable in the development branch:
+
+```sh
+cargo run --locked -p pos-server
+curl -i http://127.0.0.1:8787/health
+# Alternative loopback address:
+cargo run --locked -p pos-server -- --listen 127.0.0.1:8788
+```
+
+Axum and Tokio provide a localhost-only HTTP listener, health routes at
+`/health` and `/api/v1/health`, JSON error responses, structured logging
+and graceful SIGINT/SIGTERM shutdown. This is not a remotely accessible
+server or a task/project API. Non-loopback addresses are deliberately rejected.
+See [server foundation and security limitations](docs/server-foundation.md).
 
 ## Branching and releases
 
