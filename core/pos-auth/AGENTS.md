@@ -12,5 +12,9 @@ Never expose credentials, session secrets or tokens through logs or debug output
 
 ## Verification
 
-Future tests should cover expired, revoked and malformed credentials.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+Argon2id password verification and random bearer-token hashing are implemented
+with unit tests. Expiry, device revocation, session revocation and disabled-user
+checks are enforced by pos-postgres and tested using ephemeral CI PostgreSQL.
+No HTTP login, self-registration or token exposure endpoint exists yet.
+Do not log or serialize secrets through Debug; never expose private methods as
+unauthenticated HTTP handlers.
