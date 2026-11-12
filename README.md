@@ -107,7 +107,26 @@ Projects use a **stable unique slug** (for example, `university-work`) which doe
 
 **Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open that project's filtered tasks. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
 
-Projects currently provide **one-to-many task grouping only**. Project membership, permissions, task priorities, recurrence, subprojects, calendar integration and server sync are not implemented.
+Projects currently provide **one-to-many task grouping only**. Project membership, permissions, recurrence, subprojects, calendar integration and server sync are not implemented.
+
+### Task Engine v2
+
+Local tasks now support **priorities** (low, normal, high, urgent), **statuses** (todo, in-progress, blocked, completed), and optional multiline descriptions. Existing tasks automatically migrate to normal priority, with existing completed tasks mapped to completed status. The legacy boolean completed flag remains consistent with the status for CLI and Ratatui compatibility.
+
+```sh
+./target/debug/pos tasks add "Write report" --priority high --status in-progress --description "Draft the introduction"
+./target/debug/pos tasks edit 1 --priority urgent --status blocked --description "Waiting for review"
+./target/debug/pos tasks edit 1 --clear-description
+./target/debug/pos tasks list --search "report" --sort priority
+./target/debug/pos tasks list --priority high --status blocked --project university
+./target/debug/pos tasks list --due-before 2026-12-17 --sort due
+./target/debug/pos tasks list --status completed --json
+./target/debug/pos tasks list --all --sort created
+```
+
+Search matches a case-insensitive substring of the title or description (ASCII case-folding for SQLite's built-in lower function); percent and underscore are treated literally. Due-before is inclusive. Priority sort places urgent first; created sort places the newest task first. The default list hides completed tasks except when explicitly filtering for completed. Done/reopen still work and keep both completion representations consistent.
+
+All changes are validated and applied through the shared task engine and SQLx repository; multi-field edits are **atomic**, including project reassignment. The SQLite migration adds columns and indexes to existing databases without dropping tasks. JSON export is now format_version 2 and includes the new fields. **The Ratatui layout has not changed**; the new metadata is currently managed through the CLI.
 
 ### Local data safety
 
@@ -263,8 +282,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks and CI.
-- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, a server listener, authentication, permissions, multiuser data isolation, priorities, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, a server listener, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 

@@ -266,7 +266,7 @@ fn backup_restore_export_and_integrity_work_across_processes() {
 
     let stdout_json = success(Some(&live), &["data", "export"]);
     let parsed: serde_json::Value = serde_json::from_str(&stdout_json).unwrap();
-    assert_eq!(parsed["format_version"], 1);
+    assert_eq!(parsed["format_version"], 2);
     assert_eq!(parsed["projects"][0]["slug"], "research");
     assert_eq!(parsed["tasks"].as_array().unwrap().len(), 2);
     assert_eq!(parsed["tasks"][0]["project_id"], 1);
@@ -275,7 +275,7 @@ fn backup_restore_export_and_integrity_work_across_processes() {
 
     // Export files must never be silently replaced.
     success(Some(&live), &["data", "export", "--output", json_str]);
-    assert!(String::from_utf8_lossy(&fs::read(&json).unwrap()).contains("\"format_version\": 1"));
+    assert!(String::from_utf8_lossy(&fs::read(&json).unwrap()).contains("\"format_version\": 2"));
     let sentinel = fs::read(&json).unwrap();
     assert!(
         fails(Some(&live), &["data", "export", "--output", json_str]).contains("already exists")
@@ -375,4 +375,260 @@ fn data_restore_does_not_initialize_default_or_explicit_source() {
     assert!(!absent.exists());
     assert!(!restored.exists());
     assert!(!dir.path().join("config").exists());
+}
+
+#[test]
+fn task_engine_v2_cli_validates_filters_and_atomic_edits() {
+    use std::path::Path;
+
+    fn run(db: &Path, args: &[&str]) -> std::process::Output {
+        Command::new(env!("CARGO_BIN_EXE_pos"))
+            .arg("--db")
+            .arg(db)
+            .args(args)
+            .output()
+            .expect("run POS")
+    }
+    fn success(db: &Path, args: &[&str]) -> String {
+        let output = run(db, args);
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+    fn json(db: &Path, args: &[&str]) -> serde_json::Value {
+        serde_json::from_str(&success(db, args)).unwrap()
+    }
+    fn failure(db: &Path, args: &[&str]) -> String {
+        let output = run(db, args);
+        assert!(!output.status.success(), "unexpected success: {args:?}");
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("pos.sqlite3");
+
+    success(&db, &["projects", "add", "University"]);
+    success(
+        &db,
+        &[
+            "tasks",
+            "add",
+            "Urgent fix",
+            "--project",
+            "university",
+            "--description",
+            "Needle in a haystack\n100% important",
+            "--priority",
+            "urgent",
+            "--status",
+            "in-progress",
+            "--due",
+            "2026-12-01",
+        ],
+    );
+    success(
+        &db,
+        &["tasks", "add", "Normal report", "--due", "2026-11-28"],
+    );
+    success(
+        &db,
+        &[
+            "tasks",
+            "add",
+            "High _ priority",
+            "--priority",
+            "high",
+            "--status",
+            "blocked",
+        ],
+    );
+    success(
+        &db,
+        &[
+            "tasks",
+            "add",
+            "Finished",
+            "--status",
+            "completed",
+            "--priority",
+            "low",
+        ],
+    );
+
+    let tasks = json(&db, &["tasks", "list", "--json", "--sort", "priority"]);
+    let titles: Vec<_> = tasks
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        titles,
+        vec!["Urgent fix", "High _ priority", "Normal report"]
+    );
+    assert_eq!(tasks[0]["priority"], "urgent");
+    assert_eq!(tasks[0]["status"], "in-progress");
+    assert_eq!(
+        tasks[0]["description"],
+        "Needle in a haystack\n100% important"
+    );
+    assert_eq!(tasks[0]["completed"], false);
+
+    let done = json(&db, &["tasks", "list", "--json", "--status", "completed"]);
+    assert_eq!(done.as_array().unwrap().len(), 1);
+    assert_eq!(done[0]["title"], "Finished");
+    assert_eq!(done[0]["completed"], true);
+    assert_eq!(
+        json(&db, &["tasks", "list", "--json", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+
+    for (filter, expected) in [
+        (vec!["--search", "NEEDLE"], "Urgent fix"),
+        (vec!["--search", "100%"], "Urgent fix"),
+        (vec!["--search", "_"], "High _ priority"),
+        (vec!["--due-before", "2026-11-28"], "Normal report"),
+        (vec!["--project", "university"], "Urgent fix"),
+        (vec!["--priority", "high"], "High _ priority"),
+        (vec!["--status", "blocked"], "High _ priority"),
+    ] {
+        let mut args = vec!["tasks", "list", "--json"];
+        args.extend(filter);
+        let result = json(&db, &args);
+        assert_eq!(result.as_array().unwrap().len(), 1, "{args:?}");
+        assert_eq!(result[0]["title"], expected);
+    }
+
+    assert!(
+        json(&db, &["tasks", "list", "--json", "--search", "' OR 1=1 --"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(failure(&db, &["tasks", "list", "--due-before", "2026-02-30"]).contains("due date"));
+    assert!(failure(&db, &["tasks", "list", "--sort", "random"]).contains("sort must be"));
+    assert!(failure(&db, &["tasks", "add", "Bad", "--priority", "extreme"]).contains("priority"));
+    assert!(failure(&db, &["tasks", "add", "Bad", "--status", "nonexistent"]).contains("status"));
+
+    let original = json(&db, &["tasks", "list", "--json", "--all"]);
+    assert!(
+        failure(
+            &db,
+            &[
+                "tasks",
+                "edit",
+                "1",
+                "--priority",
+                "low",
+                "--title",
+                "Bad change",
+                "--due",
+                "2026-02-30",
+                "--project",
+                "university"
+            ]
+        )
+        .contains("due date")
+    );
+    assert_eq!(json(&db, &["tasks", "list", "--json", "--all"]), original);
+
+    // Failed project reassignment must not update other columns.
+    assert!(
+        failure(
+            &db,
+            &[
+                "tasks",
+                "edit",
+                "1",
+                "--title",
+                "Changed",
+                "--priority",
+                "low",
+                "--project",
+                "nonexistent"
+            ]
+        )
+        .contains("not found")
+    );
+    assert_eq!(json(&db, &["tasks", "list", "--json", "--all"]), original);
+
+    success(
+        &db,
+        &[
+            "tasks",
+            "edit",
+            "1",
+            "--title",
+            "Updated urgent",
+            "--priority",
+            "high",
+            "--status",
+            "blocked",
+            "--description",
+            "Brief note",
+            "--clear-project",
+        ],
+    );
+    let edited = json(&db, &["tasks", "list", "--json", "--all"]);
+    let edited_task = edited
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"] == 1)
+        .unwrap();
+    assert_eq!(edited_task["title"], "Updated urgent");
+    assert_eq!(edited_task["priority"], "high");
+    assert_eq!(edited_task["status"], "blocked");
+    assert_eq!(edited_task["project_id"], serde_json::Value::Null);
+    assert_eq!(edited_task["description"], "Brief note");
+    assert_eq!(edited_task["completed"], false);
+
+    success(
+        &db,
+        &[
+            "tasks",
+            "edit",
+            "1",
+            "--clear-description",
+            "--status",
+            "completed",
+        ],
+    );
+    let task = json(&db, &["tasks", "list", "--json", "--status", "completed"]);
+    assert!(
+        task.as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == 1 && t["description"].is_null() && t["completed"] == true)
+    );
+    success(&db, &["tasks", "reopen", "1"]);
+    let task = json(
+        &db,
+        &["tasks", "list", "--json", "--search", "Updated urgent"],
+    );
+    assert_eq!(task[0]["status"], "todo");
+    success(&db, &["tasks", "done", "1"]);
+    let task = json(&db, &["tasks", "list", "--json", "--status", "completed"]);
+    assert!(
+        task.as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == 1 && t["status"] == "completed")
+    );
+
+    let export = json(&db, &["data", "export"]);
+    assert_eq!(export["format_version"], 2);
+    assert_eq!(export["tasks"].as_array().unwrap().len(), 4);
+    let backup = dir.path().join("backup.sqlite3");
+    success(&db, &["data", "backup", backup.to_str().unwrap()]);
+    let backed_up = json(&backup, &["data", "export"]);
+    assert_eq!(backed_up["tasks"].as_array().unwrap().len(), 4);
+    assert_eq!(backed_up["tasks"][0]["status"], "completed");
+    success(&db, &["data", "check"]);
 }
