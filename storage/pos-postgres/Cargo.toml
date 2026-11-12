@@ -4,3 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish = false
+
+[dependencies]
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

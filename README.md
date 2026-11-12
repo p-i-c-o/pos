@@ -307,8 +307,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback-only HTTP health server (develop only) and CI.
-- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server data APIs, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback-only HTTP health server and isolated PostgreSQL connection/migration foundation (develop only), and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server database integration, server data APIs, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -335,6 +335,15 @@ Axum and Tokio provide a localhost-only HTTP listener, health routes at
 and graceful SIGINT/SIGTERM shutdown. This is not a remotely accessible
 server or a task/project API. Non-loopback addresses are deliberately rejected.
 See [server foundation and security limitations](docs/server-foundation.md).
+
+## PostgreSQL storage foundation (Phase 9a)
+
+The development branch also contains a dedicated `pos-postgres` crate with
+a bounded connection pool, SQLx migrations and persistent server-instance
+metadata. PostgreSQL integration tests run against an isolated, disposable
+database in CI. **This is not yet wired into the Axum server, and stores no
+Tasks, Projects or user data.** See
+[PostgreSQL foundation details](docs/postgres-foundation.md).
 
 ## Branching and releases
 
