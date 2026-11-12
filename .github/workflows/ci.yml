@@ -31,4 +31,11 @@ jobs:
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks list --json | grep -F '"title": "CI task"'
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks done 1
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks list --all | grep -F '[x] CI task'
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" projects add "CI Project" | grep -F '[ci-project]'
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks edit 1 --project ci-project
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks list --all --project ci-project | grep -F 'CI task'
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" projects archive 1
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" projects list --all | grep -F 'archived'
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" projects delete 1 --yes
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks list --all --json | grep -F '"project_id": null'
           ./target/debug/pos-server | grep -F "server scaffold"

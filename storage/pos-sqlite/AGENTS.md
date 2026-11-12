@@ -13,4 +13,4 @@ Keep database-specific code here; changes to schemas and migrations need approva
 ## Verification
 
 Future tests should cover transactions, offline recovery and migration safety.
-The first Tasks SQLx migration and adapter are implemented. Never change an applied migration in place; add a new migration after approval.
+SQLx has additive Tasks and Projects migrations. Never edit an applied migration in place; add a new migration after approval. Projects must not cascade-delete Tasks.
