@@ -40,7 +40,7 @@ jobs:
       - name: Smoke test CLI, SQLite Tasks and server
         run: |
           ./target/debug/pos --help | grep -F "interactive terminal UI"
-          ./target/debug/pos --version | grep -F "POS 0.0.0"
+          ./target/debug/pos --version | grep -F "POS 0.1.0"
           TEST_DIR="$(mktemp -d)"
           trap 'rm -rf "$TEST_DIR"' EXIT
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks add "CI task" --due 2026-12-17
@@ -66,3 +66,29 @@ jobs:
           ./target/debug/pos --db "$TEST_DIR/recovered.sqlite3" data check | grep -F 'integrity and foreign keys OK'
           ./target/debug/pos --db "$TEST_DIR/recovered.sqlite3" tasks list --all | grep -F 'CI task'
           ./target/debug/pos-server | grep -F "server scaffold"
+
+      - name: Verify optimized release candidate and safe local installation
+        if: startsWith(github.ref, 'refs/heads/release/') || startsWith(github.head_ref, 'release/')
+        run: |
+          bash -n scripts/install-local.sh scripts/release-smoke.sh
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck scripts/install-local.sh scripts/release-smoke.sh
+          fi
+          cargo build --release --locked -p pos-cli --bin pos
+          bash scripts/release-smoke.sh
+          INSTALL_ROOT="$(mktemp -d)"
+          trap 'rm -rf "$INSTALL_ROOT"' EXIT
+          bash scripts/install-local.sh --prefix "$INSTALL_ROOT"
+          "$INSTALL_ROOT/bin/pos" --version | grep -F "POS 0.1.0"
+          if bash scripts/install-local.sh --prefix "$INSTALL_ROOT" >/dev/null 2>&1; then
+            echo "::error::Installer unexpectedly overwrote existing executable"
+            exit 1
+          fi
+          bash scripts/install-local.sh --prefix "$INSTALL_ROOT" --upgrade
+          "$INSTALL_ROOT/bin/pos" --version | grep -F "POS 0.1.0"
+          mkdir -p "$INSTALL_ROOT/link-test/bin"
+          ln -s /nonexistent "$INSTALL_ROOT/link-test/bin/pos"
+          if bash scripts/install-local.sh --prefix "$INSTALL_ROOT/link-test" >/dev/null 2>&1; then
+            echo "::error::Installer unexpectedly replaced a symlink"
+            exit 1
+          fi
