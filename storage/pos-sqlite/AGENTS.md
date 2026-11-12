@@ -13,4 +13,4 @@ Keep database-specific code here; changes to schemas and migrations need approva
 ## Verification
 
 Future tests should cover transactions, offline recovery and migration safety.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+The first Tasks SQLx migration and adapter are implemented. Never change an applied migration in place; add a new migration after approval.

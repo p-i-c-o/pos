@@ -23,7 +23,7 @@ These instructions apply to the entire POS repository. Read `README.md` for the 
 
 ## 3. Technical direction
 
-- The stack is Rust, Ratatui with a Crossterm terminal backend, a scriptable POS CLI, and planned Axum server, PostgreSQL server storage and SQLite local storage. Clap is an option for future CLI parsing.
+- The stack is Rust, Ratatui with a Crossterm terminal backend, Clap CLI, SQLite with SQLx for local Tasks, and a planned Axum server with PostgreSQL storage.
 - This is a documented design direction, not permission to add dependencies or create the entire stack at once.
 - Prefer simple, maintainable, idiomatic Rust and lightweight established libraries.
 - Keep data model, storage and UI concerns separated; do not block keyboard input on network operations.
@@ -41,7 +41,7 @@ These instructions apply to the entire POS repository. Read `README.md` for the 
 - Notes and journal share pos-notes. Native Git, GitHub and GitLab have separate crates.
 - pos-mail is initially an IMAP/SMTP client only. AI and advanced automation crates are not in the scaffold.
 - Read the nearest crate AGENTS.md before modifying that crate. Root instructions always apply.
-- The initial implementation is intentionally a compiling scaffold. Do not invent implementation behind placeholders.
+- The local Tasks slice is functional via pos-tasks, pos-storage, pos-sqlite, pos-core, pos-cli and pos-tui. All other feature and server crates remain placeholders.
 - Rust edition 2024 and Rust 1.99.1 are pinned in the workspace; use Cargo and formatting/linting consistently.
 
 ## 4. Explicit approval gates

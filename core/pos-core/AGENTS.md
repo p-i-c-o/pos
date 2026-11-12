@@ -13,4 +13,4 @@ Avoid module-specific persistence, terminal rendering or direct external provide
 ## Verification
 
 Future tests should cover operation validation and consistent error handling.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+TaskService now implements validated shared task operations. Future modules must use the same UI-independent operation model.
