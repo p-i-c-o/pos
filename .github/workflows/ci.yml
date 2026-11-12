@@ -2,13 +2,29 @@ name: Rust workspace CI
 
 on:
   push:
-    branches: ["main", "docs/**", "feature/**", "fix/**"]
+    branches: ["main", "develop", "feature/**", "fix/**", "docs/**", "release/**", "hotfix/**"]
   pull_request:
+    branches: ["main", "develop"]
+
+permissions:
+  contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
+      - name: Validate GitFlow PR target
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "$GITHUB_BASE_REF" = "main" ]; then
+            case "$GITHUB_HEAD_REF" in
+              release/*|hotfix/*) ;;
+              *)
+                echo "::error::PRs to main must originate from release/* or hotfix/*. Target develop instead."
+                exit 1
+                ;;
+            esac
+          fi
       - name: Check out repository
         uses: actions/checkout@v4
       - name: Install pinned Rust toolchain

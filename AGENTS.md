@@ -88,7 +88,12 @@ Do not expand the task into unrelated features or modify files outside the repos
 
 ## 8. Git, documentation and reporting
 
-- Start new work on a focused branch; do not push directly to `main`.
+- Follow the lightweight GitFlow in `docs/git-workflow.md`.
+- Permanent branches: `main` is stable/releasable; `develop` integrates work for the next release.
+- Create `feature/*`, `fix/*`, and `docs/*` branches from `develop`; open PRs into `develop`, not `main`.
+- Create `release/*` branches from `develop` and `hotfix/*` from `main`. Only release and hotfix PRs target `main`; integrate their final changes back into `develop`.
+- `main` and `develop` require PRs with passing CI. Never force-push or delete either branch.
+- Start new work on a focused branch; do not push directly to protected branches.
 - Keep commits narrowly scoped with descriptive messages. Never commit generated secrets, caches or credentials.
 - Update README or other relevant docs when implemented behaviour, commands or architecture change.
 - At completion, report: changes made, files affected, tests and results, open issues, and any approvals needed.
