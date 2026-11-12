@@ -7,3 +7,16 @@
 .idea/
 .vscode/
 .DS_Store
+
+# Local POS databases and SQLite sidecar files (never commit personal data)
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-wal
+*.db-shm
+.pos-staging-*
+.pos-export-*

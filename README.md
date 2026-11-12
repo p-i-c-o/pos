@@ -109,6 +109,22 @@ Projects use a **stable unique slug** (for example, `university-work`) which doe
 
 Projects currently provide **one-to-many task grouping only**. Project membership, permissions, task priorities, recurrence, subprojects, calendar integration and server sync are not implemented.
 
+### Local data safety
+
+New engine-focused maintenance commands operate separately from the Ratatui UI:
+
+~~~sh
+./target/debug/pos data check
+./target/debug/pos data backup /path/to/new-backup.sqlite3
+./target/debug/pos data restore /path/to/backup.sqlite3 --output /path/to/new-recovered.sqlite3
+./target/debug/pos data export --output /path/to/new-export.json
+./target/debug/pos data export    # versioned JSON to stdout
+~~~
+
+SQLite backups are consistent even with live WAL writes using SQLite's VACUUM INTO operation. All backup, restore and --output export destinations must be **new files**: no overwrite is permitted. Backups and restores are validated using full SQLite integrity and foreign-key checks. **Restore never replaces the active database**; select a recovered copy with --db or POS_DB_PATH after verifying it. JSON export is read-only and includes all Tasks/Projects in one transaction, but JSON import is not implemented.
+
+See [local backup and recovery procedures](docs/data-recovery.md) for failure handling, safe recovery steps and current limitations.
+
 ### Development verification
 
 ```sh
@@ -247,8 +263,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; persistent local Tasks and Projects, task-project linking and filtered views, CLI JSON output, SQLx migrations, Ratatui management, tests and CI.
-- **What doesn't (yet):** Other functional modules, a server listener, authentication, permissions, multiuser data isolation, project membership, priorities, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, a server listener, authentication, permissions, multiuser data isolation, priorities, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 

@@ -1,7 +1,9 @@
 //! SQLite implementation of POS task persistence using SQLx.
 
 use pos_projects::{NewProject, Project};
-use pos_storage::{ProjectRepository, StorageError, TaskRepository};
+use pos_storage::{
+    LocalSnapshot, ProjectRepository, SnapshotRepository, StorageError, TaskRepository,
+};
 use pos_tasks::{NewTask, Task, TaskPatch};
 use sqlx::{
     Row, SqlitePool,
@@ -9,12 +11,23 @@ use sqlx::{
 };
 use std::path::Path;
 
+mod maintenance;
+pub use maintenance::SqliteMaintenance;
+
 #[derive(Clone)]
 pub struct SqliteTaskRepository {
     pool: SqlitePool,
 }
 
 impl SqliteTaskRepository {
+    /// Open a validated existing POS database read-only, without creating files
+    /// or applying SQLx migrations. Used for JSON export and inspection.
+    pub async fn open_read_only(path: &Path) -> Result<Self, StorageError> {
+        SqliteMaintenance::check(path).await?;
+        let pool = maintenance::read_only_pool(path).await?;
+        Ok(Self { pool })
+    }
+
     /// Connect to an existing SQLite file or create one. Migrations only add
     /// POS-owned tables; existing application tables are not modified.
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
@@ -305,6 +318,33 @@ impl ProjectRepository for SqliteTaskRepository {
             .map_err(storage_err)?
             .rows_affected()
             > 0)
+    }
+}
+
+impl SnapshotRepository for SqliteTaskRepository {
+    async fn snapshot(&self) -> Result<LocalSnapshot, StorageError> {
+        // A single read transaction sees one consistent SQLite snapshot even if
+        // another connection writes tasks/projects between the two SELECTs.
+        let mut tx = self.pool.begin().await.map_err(storage_err)?;
+        let tasks_sql = format!("SELECT {TASK_COLUMNS} FROM tasks ORDER BY id");
+        let tasks: Vec<Task> = sqlx::query(&tasks_sql)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(storage_err)?
+            .into_iter()
+            .map(row_to_task)
+            .collect::<Result<_, _>>()?;
+
+        let projects_sql = format!("SELECT {PROJECT_COLUMNS} FROM projects ORDER BY id");
+        let projects: Vec<Project> = sqlx::query(&projects_sql)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(storage_err)?
+            .into_iter()
+            .map(row_to_project)
+            .collect::<Result<_, _>>()?;
+        tx.commit().await.map_err(storage_err)?;
+        Ok(LocalSnapshot { tasks, projects })
     }
 }
 

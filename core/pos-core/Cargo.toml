@@ -9,3 +9,4 @@ publish = false
 pos-tasks = { path = "../../modules/pos-tasks" }
 pos-projects = { path = "../../modules/pos-projects" }
 pos-storage = { path = "../../storage/pos-storage" }
+serde = { version = "1", features = ["derive"] }

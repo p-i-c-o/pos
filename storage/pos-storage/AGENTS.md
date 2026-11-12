@@ -13,4 +13,4 @@ Do not place SQLite or PostgreSQL SQL in this crate. Define backend-neutral cont
 ## Verification
 
 Future tests should define backend conformance expectations.
-TaskRepository and ProjectRepository provide backend-neutral async task and project contracts, implemented locally by pos-sqlite.
+TaskRepository, ProjectRepository and SnapshotRepository provide backend-neutral contracts, implemented locally by pos-sqlite.

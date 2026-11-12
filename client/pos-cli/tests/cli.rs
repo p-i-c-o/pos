@@ -215,3 +215,164 @@ fn project_lifecycle_and_task_links_survive_separate_processes() {
     assert_eq!(tasks_json[1]["project_id"], serde_json::Value::Null);
     assert!(err(&db, &["projects", "show", "1"]).contains("not found"));
 }
+
+#[test]
+fn backup_restore_export_and_integrity_work_across_processes() {
+    use std::{fs, path::Path};
+
+    fn run(db: Option<&Path>, args: &[&str]) -> std::process::Output {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_pos"));
+        if let Some(db) = db {
+            cmd.arg("--db").arg(db);
+        }
+        cmd.args(args).output().expect("POS command")
+    }
+    fn success(db: Option<&Path>, args: &[&str]) -> String {
+        let result = run(db, args);
+        assert!(
+            result.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        String::from_utf8_lossy(&result.stdout).into_owned()
+    }
+    fn fails(db: Option<&Path>, args: &[&str]) -> String {
+        let result = run(db, args);
+        assert!(!result.status.success(), "unexpected success: {args:?}");
+        String::from_utf8_lossy(&result.stderr).into_owned()
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let live = dir.path().join("live.sqlite3");
+    let backup = dir.path().join("backup.sqlite3");
+    let restored = dir.path().join("restored.sqlite3");
+    let json = dir.path().join("snapshot.json");
+
+    let backup_str = backup.to_str().unwrap();
+    let restored_str = restored.to_str().unwrap();
+    let json_str = json.to_str().unwrap();
+
+    assert!(success(Some(&live), &["projects", "add", "Research"]).contains("research"));
+    assert!(
+        success(
+            Some(&live),
+            &["tasks", "add", "First task", "--project", "research"]
+        )
+        .contains("Created")
+    );
+    assert!(success(Some(&live), &["tasks", "done", "1"]).contains("Completed"));
+    assert!(success(Some(&live), &["tasks", "add", "Second task"]).contains("Created"));
+    assert!(success(Some(&live), &["data", "check"]).contains("integrity and foreign keys OK"));
+
+    let stdout_json = success(Some(&live), &["data", "export"]);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout_json).unwrap();
+    assert_eq!(parsed["format_version"], 1);
+    assert_eq!(parsed["projects"][0]["slug"], "research");
+    assert_eq!(parsed["tasks"].as_array().unwrap().len(), 2);
+    assert_eq!(parsed["tasks"][0]["project_id"], 1);
+    assert_eq!(parsed["tasks"][0]["completed"], true);
+    assert_eq!(parsed["tasks"][1]["project_id"], serde_json::Value::Null);
+
+    // Export files must never be silently replaced.
+    success(Some(&live), &["data", "export", "--output", json_str]);
+    assert!(String::from_utf8_lossy(&fs::read(&json).unwrap()).contains("\"format_version\": 1"));
+    let sentinel = fs::read(&json).unwrap();
+    assert!(
+        fails(Some(&live), &["data", "export", "--output", json_str]).contains("already exists")
+    );
+    assert_eq!(fs::read(&json).unwrap(), sentinel);
+
+    success(Some(&live), &["data", "backup", backup_str]);
+    assert!(success(Some(&live), &["data", "check"]).contains("OK"));
+    assert!(success(Some(&backup), &["data", "check"]).contains("OK"));
+
+    assert!(fails(Some(&live), &["data", "backup", backup_str]).contains("already exists"));
+    assert!(
+        fails(Some(&live), &["data", "backup", live.to_str().unwrap()]).contains("already exists")
+    );
+    assert!(
+        fails(
+            Some(&live),
+            &["data", "restore", backup_str, "--output", restored_str]
+        )
+        .contains("--db does not apply to restore")
+    );
+    assert!(!restored.exists());
+
+    // State diverges after snapshot; restoring must not touch the live DB.
+    success(Some(&live), &["tasks", "add", "After backup"]);
+    assert!(
+        success(
+            None,
+            &["data", "restore", backup_str, "--output", restored_str]
+        )
+        .contains("Verified and restored")
+    );
+    let recovered: serde_json::Value =
+        serde_json::from_str(&success(Some(&restored), &["data", "export"])).unwrap();
+    let live_data: serde_json::Value =
+        serde_json::from_str(&success(Some(&live), &["data", "export"])).unwrap();
+    assert_eq!(recovered["tasks"].as_array().unwrap().len(), 2);
+    assert_eq!(live_data["tasks"].as_array().unwrap().len(), 3);
+    assert_eq!(recovered["projects"][0]["slug"], "research");
+    assert_eq!(recovered["tasks"][0]["completed"], true);
+
+    // No overwrite on restore (including an existing recovered database).
+    assert!(
+        fails(
+            None,
+            &["data", "restore", backup_str, "--output", restored_str]
+        )
+        .contains("already exists")
+    );
+    assert_eq!(fs::read(&json).unwrap(), sentinel);
+
+    // Invalid SQLite and missing source cannot produce partial restored files.
+    let corrupt = dir.path().join("corrupt.sqlite3");
+    fs::write(&corrupt, b"bad db").unwrap();
+    let invalid_dest = dir.path().join("invalid.sqlite3");
+    assert!(
+        !run(
+            None,
+            &[
+                "data",
+                "restore",
+                corrupt.to_str().unwrap(),
+                "--output",
+                invalid_dest.to_str().unwrap()
+            ]
+        )
+        .status
+        .success()
+    );
+    assert!(!invalid_dest.exists());
+    let nonexistent = dir.path().join("missing.sqlite3");
+    assert!(
+        !run(Some(&nonexistent), &["data", "backup", "unused.sqlite3"])
+            .status
+            .success()
+    );
+    assert!(!nonexistent.exists());
+}
+
+#[test]
+fn data_restore_does_not_initialize_default_or_explicit_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let absent = dir.path().join("absent.sqlite3");
+    let restored = dir.path().join("new.sqlite3");
+    let result = Command::new(env!("CARGO_BIN_EXE_pos"))
+        .args([
+            "data",
+            "restore",
+            absent.to_str().unwrap(),
+            "--output",
+            restored.to_str().unwrap(),
+        ])
+        .env("XDG_DATA_HOME", dir.path().join("config"))
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(!absent.exists());
+    assert!(!restored.exists());
+    assert!(!dir.path().join("config").exists());
+}

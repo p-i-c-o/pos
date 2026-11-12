@@ -41,7 +41,7 @@ These instructions apply to the entire POS repository. Read `README.md` for the 
 - Notes and journal share pos-notes. Native Git, GitHub and GitLab have separate crates.
 - pos-mail is initially an IMAP/SMTP client only. AI and advanced automation crates are not in the scaffold.
 - Read the nearest crate AGENTS.md before modifying that crate. Root instructions always apply.
-- Local Tasks and Projects operate through pos-tasks, pos-projects, pos-storage, pos-sqlite, pos-core, pos-cli and pos-tui. Other feature and server crates remain placeholders.
+- Local Tasks/Projects operate through pos-tasks, pos-projects, pos-storage, pos-sqlite, pos-core, pos-cli and pos-tui. The engine supports manual consistent backups, safe new-path restore, integrity checking and JSON export. Other feature and server crates remain placeholders.
 - Rust edition 2024 and Rust 1.99.1 are pinned in the workspace; use Cargo and formatting/linting consistently.
 
 ## 4. Explicit approval gates

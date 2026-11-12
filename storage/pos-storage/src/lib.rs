@@ -52,3 +52,16 @@ pub trait ProjectRepository: Send + Sync {
     /// Deleting a project must NOT delete tasks: they become unassigned.
     async fn delete_project(&self, id: i64) -> Result<bool, StorageError>;
 }
+
+/// A database-consistent snapshot of local POS-owned records.
+pub struct LocalSnapshot {
+    pub tasks: Vec<Task>,
+    pub projects: Vec<Project>,
+}
+
+/// Read both entity tables in one database transaction so export never
+/// mixes task references with projects from a different database revision.
+#[allow(async_fn_in_trait)]
+pub trait SnapshotRepository: Send + Sync {
+    async fn snapshot(&self) -> Result<LocalSnapshot, StorageError>;
+}
