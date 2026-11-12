@@ -1,8 +1,9 @@
 # PostgreSQL server storage foundation (Phase 9a)
 
 **Development milestone only.** This crate is not present in tagged v0.1.0
-as a functional server database. It is not yet wired into the Axum server,
-and it does not store Tasks, Projects or shared workspace records. Phase 9b adds trusted-only user/device credential storage.
+as a functional server database. It is optionally wired into Axum read-only authenticated identity/workspace
+metadata endpoints, but does not store Tasks or Projects. Phase 9b added
+trusted-only user/device credentials, and Phase 9c adds workspace scopes.
 
 ## What it provides
 
@@ -21,7 +22,8 @@ The first migration creates just one POS-owned table:
 
 It inserts exactly one row for this database. SQLx also maintains
 `_sqlx_migrations`. Future migrations must design user/workspace ownership
-and authorization boundaries before storing business records. Phase 9b adds user, device and session tables in a separate migration.
+and authorization boundaries before storing business records. Later migrations
+add user/device/session security records and workspace membership metadata.
 
 **Do not use this crate as a generic anonymous data repository.** There are no
 Task/Project repository implementations or HTTP business-data routes.

@@ -98,5 +98,5 @@ verifies no POS user data was created or modified.
 
 Future milestones: connect authenticated identity and PostgreSQL to secure
 server APIs, establish workspace-scoped authorization and eventually synchronize.
-The identity and PostgreSQL storage crates now exist internally, but this
-server executable does not use or expose them.
+The server now optionally uses PostgreSQL for authenticated, read-only
+user/workspace metadata; it still exposes no login or Tasks/Projects data APIs.

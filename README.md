@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server has development-only loopback health endpoints; internal user/device authentication primitives and PostgreSQL credential storage are implemented, but HTTP login, business-data APIs, authorization and synchronization are not.
+**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server has local-only health and optional read-only authenticated identity/workspace metadata APIs; HTTP login, Tasks/Projects APIs, remote access and synchronization are not implemented.
 
 ## Overview
 
@@ -78,7 +78,7 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. On develop, the server has a loopback-only health endpoint and trusted-only user/device identity primitives; HTTP authentication, multiuser permissions, business-data HTTP APIs and cross-device synchronisation are **not implemented**.
+**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. On develop, the server has loopback health plus optional PostgreSQL-backed authenticated user/workspace metadata APIs and strict per-workspace visibility; HTTP login, server Tasks/Projects APIs and cross-device synchronisation are **not implemented**.
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
@@ -288,7 +288,7 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Background work | Rust scheduler/worker and persistent database-backed jobs |
 | Service supervision | systemd on Linux |
 
-Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server provides loopback-only HTTP health/lifecycle infrastructure. PostgreSQL user/device authentication is implemented internally, but the server has no authentication routes, business-data endpoints or database integration. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
+Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server has local-only HTTP health and optional PostgreSQL-backed read-only identity/workspace metadata routes. There are no HTTP login/registration routes, business-data endpoints, sync or remote-access support. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
 
 ## Roadmap
 
@@ -307,8 +307,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback-only HTTP health server, isolated PostgreSQL connection/migration foundation and trusted-only user/device credential primitives (develop only), and CI.
-- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server database integration, server data APIs, public authentication endpoints, authorization permissions, multiuser data isolation, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated read-only identity/workspace metadata, deny-by-default workspace roles and user/device credential primitives (develop only), and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, Tasks/Projects server persistence/APIs, public login/registration, comprehensive multiuser data isolation, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -339,10 +339,10 @@ See [server foundation and security limitations](docs/server-foundation.md).
 ## PostgreSQL storage foundation (Phase 9a)
 
 The development branch also contains a dedicated `pos-postgres` crate with
-a bounded connection pool, SQLx migrations and persistent server-instance
-metadata. PostgreSQL integration tests run against an isolated, disposable
-database in CI. **This is not yet wired into the Axum server, and stores no
-Tasks, Projects or user data.** See
+a bounded connection pool, SQLx migrations, identity storage and scoped
+workspace metadata. PostgreSQL integration tests use disposable databases
+in CI. **It is wired into optional local-only read APIs, but does not store
+Tasks or Projects.** See
 [PostgreSQL foundation details](docs/postgres-foundation.md).
 
 ## User and device authentication foundation (Phase 9b)
@@ -353,10 +353,22 @@ per-user Argon2id password hashing, canonical user accounts, device UUIDs,
 revocation/disablement checks. Integration tests run on a disposable
 PostgreSQL database.
 
-**There is no login, registration, password-provisioning or session endpoint
-in Axum yet.** Identity does not imply workspace authorization. Do not expose
-the current listener or assume multiuser data isolation. See
+**There are no HTTP login, registration or password-provisioning endpoints.**
+The read-only `/api/v1/auth/me` endpoint validates an existing session. An
+identity alone grants no workspace access. Do not expose the listener or
+assume Tasks/Projects data isolation. See
 [authentication architecture and limitations](docs/authentication-foundation.md).
+
+## Authenticated read-only API and workspace access (Phase 9c)
+
+With a dedicated PostgreSQL database configured via `POS_SERVER_DATABASE_URL`,
+the loopback-only server also supports bearer-authenticated
+`GET /api/v1/auth/me` and user-scoped `GET /api/v1/workspaces`
+/ `GET /api/v1/workspaces/{id}` endpoints. Personal workspaces are owner-only;
+shared workspaces require explicit viewer/editor membership. There are no
+HTTP login, workspace mutation, Tasks/Projects or synchronization routes.
+A default launch without the database variable remains health-only.
+See [Phase 9c security and migration notes](docs/authenticated-api-foundation.md).
 
 ## Branching and releases
 

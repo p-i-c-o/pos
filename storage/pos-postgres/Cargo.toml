@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 pos-auth = { path = "../../core/pos-auth" }
+pos-permissions = { path = "../../core/pos-permissions" }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid"] }
 tokio = { version = "1", features = ["rt"] }
 uuid = "1"

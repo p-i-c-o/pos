@@ -1,9 +1,9 @@
 # User and device authentication foundation (Phase 9b)
 
 **Development-only, internal APIs.** This branch introduces identity storage and
-credential-verification primitives. **It does not enable user signup, login,
-task/project access, or authentication over HTTP.** The Axum server still serves
-only localhost health endpoints and does not connect to PostgreSQL.
+credential-verification primitives. **It does not enable user signup or password login over HTTP, or task/project
+access.** The Axum server now optionally accepts existing bearer sessions for
+read-only identity/workspace metadata on localhost, using PostgreSQL.
 
 ## Identity model
 
@@ -36,8 +36,8 @@ reuses an explicitly supplied active device UUID *belonging to that user*,
 and returns a revocable session. `authenticate_token` checks token validity;
 `revoke_token`, `revoke_device` and `disable_user` invalidate access.
 
-**These are not HTTP handlers.** They are deliberately callable only from
-trusted application code, pending an audited provisioning path, TLS,
+**These are not public HTTP provisioning or sign-in handlers.** They remain
+callable only from trusted application code, pending an audited provisioning path, TLS,
 rate-limiting, account verification, authorization policies, and security
 review. The password login interface is not suitable for exposure through a
 public proxy, Tailscale, or a network listener as-is.
