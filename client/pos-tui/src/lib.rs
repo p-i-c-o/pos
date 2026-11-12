@@ -642,6 +642,9 @@ mod tests {
         Task {
             id: 7,
             title: "Finish report".into(),
+            description: None,
+            priority: pos_tasks::TaskPriority::Normal,
+            status: pos_tasks::TaskStatus::Todo,
             due_date: Some("2026-12-17".into()),
             project_id: Some(5),
             completed: false,

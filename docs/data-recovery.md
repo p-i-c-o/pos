@@ -70,8 +70,11 @@ POS_DB_PATH override or plan an offline migration and retain rollback copies.
 ./target/debug/pos data export --output "$HOME/pos-data-2026-11-12.json"
 ~~~
 
-The JSON format has format_version: 1 and includes all local projects and tasks,
-including archived/completed records and task-project IDs. Both collections
+The JSON format has format_version: 2 and includes all local projects and tasks,
+including task descriptions, priorities and workflow statuses,
+archived/completed records and task-project IDs. This is an explicit format
+bump from version 1; software consuming JSON must handle the new fields.
+Both collections
 are read in **one SQLite read transaction**, for a consistent point-in-time
 view. The export is read-only and does not run migrations. For --output, POS
 stages and syncs the JSON before publishing without overwriting an existing
@@ -92,6 +95,10 @@ backup. IDs and timestamps are preserved in the export as reference data only.
   Use data backup to create a recovery point before upgrading or migrating.
 - Restore supports past databases with POS migration history. Opening a restored
   older database for ordinary POS operations may then apply newer migrations.
+  Task Engine v2 adds descriptions, priorities and statuses. Back up an older
+  database before first opening it with the new version. The read-only JSON
+  export expects the current schema, so migrate a restored copy of an older
+  backup before exporting it.
 
 Verification is covered by SQLite backend and CLI integration tests with
 separate file paths, live WAL-mode data, existing destination sentinels,

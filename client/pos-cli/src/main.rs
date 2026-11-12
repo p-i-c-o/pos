@@ -1,8 +1,9 @@
 //! POS executable: interactive TUI and scriptable Tasks and Projects CLI.
 
 use clap::{Parser, Subcommand};
-use pos_core::{ProjectService, TaskService, export_local_data};
+use pos_core::{ProjectService, TaskEdit, TaskSearch, TaskService, export_local_data};
 use pos_sqlite::{SqliteMaintenance, SqliteTaskRepository};
+use pos_tasks::{TaskPriority, TaskSort, TaskStatus};
 use pos_tui::{UiRequest, UiResponse};
 use std::{
     env,
@@ -85,8 +86,15 @@ enum TaskAction {
         /// Project slug (e.g. university-work).
         #[arg(long)]
         project: Option<String>,
+        /// Optional multiline description.
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long, default_value = "normal")]
+        priority: TaskPriority,
+        #[arg(long, default_value = "todo")]
+        status: TaskStatus,
     },
-    /// List incomplete tasks, or all tasks with --all; optionally filter by project.
+    /// List incomplete tasks, or all tasks with --all; filter and sort results.
     List {
         #[arg(long)]
         all: bool,
@@ -95,6 +103,20 @@ enum TaskAction {
         /// Project slug (not a project name).
         #[arg(long)]
         project: Option<String>,
+        /// Case-insensitive substring search over title and description.
+        #[arg(long)]
+        search: Option<String>,
+        #[arg(long)]
+        priority: Option<TaskPriority>,
+        /// Explicit completed status includes completed records automatically.
+        #[arg(long)]
+        status: Option<TaskStatus>,
+        /// Inclusive due-date deadline in YYYY-MM-DD.
+        #[arg(long)]
+        due_before: Option<String>,
+        /// Sort by due date (default), priority or newest creation.
+        #[arg(long, default_value = "due")]
+        sort: TaskSort,
     },
     /// Inspect a task.
     Show { id: i64 },
@@ -111,6 +133,14 @@ enum TaskAction {
         project: Option<String>,
         #[arg(long)]
         clear_project: bool,
+        #[arg(long, conflicts_with = "clear_description")]
+        description: Option<String>,
+        #[arg(long)]
+        clear_description: bool,
+        #[arg(long)]
+        priority: Option<TaskPriority>,
+        #[arg(long)]
+        status: Option<TaskStatus>,
     },
     /// Mark a task as completed.
     Done { id: i64 },
@@ -323,14 +353,43 @@ async fn run_tasks(
             title,
             due,
             project,
+            description,
+            priority,
+            status,
         } => {
             let task = service
-                .add_with_project(&title, due.as_deref(), project.as_deref())
+                .add_detailed(
+                    &title,
+                    due.as_deref(),
+                    project.as_deref(),
+                    description.as_deref(),
+                    priority,
+                    status,
+                )
                 .await?;
             println!("Created #{}: {}", task.id, task.title);
         }
-        TaskAction::List { all, json, project } => {
-            let tasks = service.list_for_project(all, project.as_deref()).await?;
+        TaskAction::List {
+            all,
+            json,
+            project,
+            search,
+            priority,
+            status,
+            due_before,
+            sort,
+        } => {
+            let tasks = service
+                .search(TaskSearch {
+                    include_completed: all || status == Some(TaskStatus::Completed),
+                    project_slug: project.as_deref(),
+                    search: search.as_deref(),
+                    priority,
+                    status,
+                    due_before: due_before.as_deref(),
+                    sort,
+                })
+                .await?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&tasks)?);
             } else {
@@ -340,7 +399,11 @@ async fn run_tasks(
             }
         }
         TaskAction::Show { id } => {
-            print_task(&service.get(id).await?);
+            let task = service.get(id).await?;
+            print_task(&task);
+            if let Some(description) = task.description {
+                println!("{description}");
+            }
         }
         TaskAction::Edit {
             id,
@@ -349,27 +412,40 @@ async fn run_tasks(
             clear_due,
             project,
             clear_project,
+            description,
+            clear_description,
+            priority,
+            status,
         } => {
             let due_update = if clear_due {
                 Some(None)
             } else {
                 due.as_deref().map(Some)
             };
-            if due_update.is_none() && title.is_none() && project.is_none() && !clear_project {
-                return Err("edit requires a changed field".into());
-            }
-
-            // Validate all fields before mutating any existing task.
-            if title.is_some() || due_update.is_some() {
-                pos_tasks::TaskPatch::new(title.as_deref(), due_update)?;
-            }
-            if project.is_some() || clear_project {
-                service.assign_project(id, project.as_deref()).await?;
-            }
-            if title.is_some() || due_update.is_some() {
-                service.edit(id, title.as_deref(), due_update).await?;
-            }
-            let task = service.get(id).await?;
+            let description_update = if clear_description {
+                Some(None)
+            } else {
+                description.as_deref().map(Some)
+            };
+            let project_update = if clear_project {
+                Some(None)
+            } else {
+                project.as_deref().map(Some)
+            };
+            // One validated atomic update, including project assignment.
+            let task = service
+                .edit_full(
+                    id,
+                    TaskEdit {
+                        title: title.as_deref(),
+                        due_date: due_update,
+                        description: description_update,
+                        priority,
+                        status,
+                        project_slug: project_update,
+                    },
+                )
+                .await?;
             println!("Updated #{}: {}", task.id, task.title);
         }
         TaskAction::Done { id } => {
@@ -453,7 +529,10 @@ fn print_task(task: &pos_tasks::Task) {
         .project_id
         .map(|id| format!(" project #{id}"))
         .unwrap_or_default();
-    println!("#{} [{}] {}{}{}", task.id, mark, task.title, due, project);
+    println!(
+        "#{} [{}] {}{}{} priority={} status={}",
+        task.id, mark, task.title, due, project, task.priority, task.status
+    );
 }
 
 fn print_project(project: &pos_projects::Project) {
