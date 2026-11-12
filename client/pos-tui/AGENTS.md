@@ -13,4 +13,4 @@ Keep storage, network connections and business rules out of rendering. Do not bl
 ## Verification
 
 Future tests should cover navigation, rendering and terminal cleanup.
-The Tasks panel is interactive. Send requests to the nonblocking CLI-owned worker and render responses; other modules remain placeholders.
+Tasks and Projects panels are interactive. Send requests to the CLI-owned worker, render responses and keep other modules as placeholders.

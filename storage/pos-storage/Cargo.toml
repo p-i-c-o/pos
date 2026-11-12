@@ -7,3 +7,4 @@ publish = false
 
 [dependencies]
 pos-tasks = { path = "../../modules/pos-tasks" }
+pos-projects = { path = "../../modules/pos-projects" }

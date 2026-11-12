@@ -1198,6 +1198,7 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "pos-core",
+ "pos-projects",
  "pos-sqlite",
  "pos-tasks",
  "pos-tui",
@@ -1214,6 +1215,7 @@ version = "0.0.0"
 name = "pos-core"
 version = "0.0.0"
 dependencies = [
+ "pos-projects",
  "pos-storage",
  "pos-tasks",
 ]
@@ -1265,6 +1267,9 @@ version = "0.0.0"
 [[package]]
 name = "pos-projects"
 version = "0.0.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "pos-protocol"
@@ -1285,6 +1290,7 @@ dependencies = [
 name = "pos-sqlite"
 version = "0.0.0"
 dependencies = [
+ "pos-projects",
  "pos-storage",
  "pos-tasks",
  "sqlx",
@@ -1296,6 +1302,7 @@ dependencies = [
 name = "pos-storage"
 version = "0.0.0"
 dependencies = [
+ "pos-projects",
  "pos-tasks",
 ]
 
@@ -1320,6 +1327,7 @@ name = "pos-tui"
 version = "0.0.0"
 dependencies = [
  "crossterm",
+ "pos-projects",
  "pos-tasks",
  "ratatui",
 ]

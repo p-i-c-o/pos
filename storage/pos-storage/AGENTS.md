@@ -13,4 +13,4 @@ Do not place SQLite or PostgreSQL SQL in this crate. Define backend-neutral cont
 ## Verification
 
 Future tests should define backend conformance expectations.
-TaskRepository defines the async Task persistence contract, currently implemented by pos-sqlite.
+TaskRepository and ProjectRepository provide backend-neutral async task and project contracts, implemented locally by pos-sqlite.

@@ -11,6 +11,7 @@ pub struct Task {
     pub id: i64,
     pub title: String,
     pub due_date: Option<String>,
+    pub project_id: Option<i64>,
     pub completed: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -20,6 +21,7 @@ pub struct Task {
 pub struct NewTask {
     pub title: String,
     pub due_date: Option<String>,
+    pub project_id: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -72,6 +74,7 @@ impl NewTask {
         Ok(Self {
             title: valid_title(title)?,
             due_date: due_date.map(valid_due_date).transpose()?,
+            project_id: None,
         })
     }
 }

@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Early implementation. Local Tasks is the first working module, with shared application operations, SQLite persistence, CLI commands and a Ratatui task list. The server and other modules remain placeholders.
+**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server and other modules remain placeholders.
 
 ## Overview
 
@@ -78,26 +78,36 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Working:** Local Tasks with SQLite storage through SQLx, shared CLI/TUI operations and an interactive Ratatui task list. Other application modules, the server, multiuser permissions, and cross-device synchronisation are **not implemented**.
+**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. The server, multiuser permissions and cross-device synchronisation are **not implemented**.
 
-Install Rust via rustup if needed; the repository pins Rust 1.99.1.
+Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
 ```sh
 cargo build --locked -p pos-cli
-./target/debug/pos                         # Interactive POS (requires a terminal)
-./target/debug/pos tasks add "Finish report" --due 2026-12-17
-./target/debug/pos tasks list
+./target/debug/pos                            # Open the interactive TUI
+./target/debug/pos projects add "University"  # Generates slug "university"
+./target/debug/pos projects list --all --json
+./target/debug/pos projects edit 1 --name "University Work"
+./target/debug/pos projects archive 1
+./target/debug/pos projects unarchive 1
+./target/debug/pos tasks add "Write report" --project university --due 2026-12-17
+./target/debug/pos tasks list --project university
+./target/debug/pos tasks edit 1 --project university
+./target/debug/pos tasks edit 1 --clear-project
 ./target/debug/pos tasks list --all --json
-./target/debug/pos tasks show 1
-./target/debug/pos tasks edit 1 --title "Revised report" --clear-due
 ./target/debug/pos tasks done 1
 ./target/debug/pos tasks reopen 1
-./target/debug/pos tasks delete 1 --yes     # Permanently deletes one task
+./target/debug/pos tasks delete 1 --yes       # Permanently deletes one task
+./target/debug/pos projects delete 1 --yes    # Deletes project, preserves its tasks
 ```
 
-Tasks are stored **only on the local device**, by default at `$XDG_DATA_HOME/pos/pos.sqlite3` or `~/.local/share/pos/pos.sqlite3` when XDG_DATA_HOME is unset. Override the database with `--db /path/to/pos.sqlite3` (before or after the subcommand) or `POS_DB_PATH=/path/to/pos.sqlite3`. POS automatically creates its default data directory and SQLite database and applies versioned schema migrations. Use a separate database file for POS rather than another application's SQLite database. No network connection is needed.
+Projects use a **stable unique slug** (for example, `university-work`) which does not change when you rename a project. You can specify `projects add "University" --slug university` to choose it explicitly. By default, lists hide archived projects and completed tasks. `--all` includes them.
 
-In Ratatui, select **Tasks** with `j/k` or arrows and press `Enter` to focus the task list. Inside Tasks: `j/k` navigate tasks, `a` adds, `e` edits titles, `d` sets/clears due dates, `Space` toggles completion, `x` asks for deletion confirmation, and `Esc` returns to navigation. `?` opens help, `r` refreshes and `q` quits. Task operations run on a worker thread so SQLite I/O does not block the keyboard event loop. Other modules remain navigable placeholders.
+**Data location:** `$XDG_DATA_HOME/pos/pos.sqlite3`, or `~/.local/share/pos/pos.sqlite3` if XDG_DATA_HOME is unset. Override it with `--db /path/to/pos.sqlite3` or `POS_DB_PATH=/path/to/pos.sqlite3`. SQLx runs additive, versioned migrations, including on existing Phase 3 task databases. The new task-project relationship is nullable, so existing tasks remain unassigned. When a project is deleted, its tasks are **not deleted**. Project and task deletion require `--yes` at the CLI and interactive confirmation in Ratatui. Back up your SQLite database before intentionally deleting real data.
+
+**Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open that project's filtered tasks. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
+
+Projects currently provide **one-to-many task grouping only**. Project membership, permissions, task priorities, recurrence, subprojects, calendar integration and server sync are not implemented.
 
 ### Development verification
 
@@ -108,7 +118,7 @@ cargo test --workspace --locked
 cargo build --workspace --locked
 ```
 
-Future POS features, **not implemented yet**, include `pos projects`, task-to-project relationships, calendar scheduling and server synchronisation.
+Future features include multiuser permissions, calendar scheduling and server synchronisation.
 
 ## Repo Layout
 
@@ -218,7 +228,7 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Background work | Rust scheduler/worker and persistent database-backed jobs |
 | Service supervision | systemd on Linux |
 
-Ratatui, Clap, SQLite and SQLx are used for local Tasks. Server components remain planned. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
+Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. Server components remain planned. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
 
 ## Roadmap
 
@@ -237,8 +247,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; locally persistent Tasks with creation/listing/editing/completion/reopening/deletion in CLI and Ratatui; SQLx migrations; CLI JSON output; tests and CI.
-- **What doesn't (yet):** Projects and other functional modules, a server listener, authentication, permissions, multiuser data isolation and cross-device synchronisation.
+- **What works:** 27-crate workspace; persistent local Tasks and Projects, task-project linking and filtered views, CLI JSON output, SQLx migrations, Ratatui management, tests and CI.
+- **What doesn't (yet):** Other functional modules, a server listener, authentication, permissions, multiuser data isolation, project membership, priorities, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -246,7 +256,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
 - **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
-- **Software:** Interactive local POS Tasks and a placeholder server; no installation or production multiuser deployment is supported.
+- **Software:** Interactive local POS Tasks and Projects plus a placeholder server; no installation or production multiuser deployment is supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
 ## How to Contribute

@@ -13,4 +13,4 @@ Avoid module-specific persistence, terminal rendering or direct external provide
 ## Verification
 
 Future tests should cover operation validation and consistent error handling.
-TaskService now implements validated shared task operations. Future modules must use the same UI-independent operation model.
+TaskService and ProjectService implement validated shared operations, including project task links. No UI or SQL belongs here.
