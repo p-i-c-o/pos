@@ -1,7 +1,7 @@
 //! Shared POS application operations, independent of CLI and TUI.
 
 use pos_projects::{NewProject, Project, validate_name, validate_slug};
-use pos_storage::{ProjectRepository, StorageError, TaskRepository};
+use pos_storage::{ProjectRepository, SnapshotRepository, StorageError, TaskRepository};
 use pos_tasks::{NewTask, Task, TaskPatch, ValidationError};
 use std::{error::Error, fmt};
 
@@ -258,4 +258,25 @@ fn project_id(id: i64) -> Result<i64, ProjectError> {
     } else {
         Ok(id)
     }
+}
+
+/// Portable JSON export format. This is a data export, not a replacement for
+/// full-fidelity SQLite backups. Format changes must bump the version.
+#[derive(serde::Serialize)]
+pub struct LocalDataExport {
+    pub format_version: u32,
+    pub projects: Vec<Project>,
+    pub tasks: Vec<Task>,
+}
+
+/// Shared, presentation-independent export operation.
+pub async fn export_local_data<R: SnapshotRepository>(
+    repository: &R,
+) -> Result<LocalDataExport, StorageError> {
+    let snapshot = repository.snapshot().await?;
+    Ok(LocalDataExport {
+        format_version: 1,
+        projects: snapshot.projects,
+        tasks: snapshot.tasks,
+    })
 }

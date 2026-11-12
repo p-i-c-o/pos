@@ -38,4 +38,11 @@ jobs:
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" projects list --all | grep -F 'archived'
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" projects delete 1 --yes
           ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" tasks list --all --json | grep -F '"project_id": null'
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" data check | grep -F 'integrity and foreign keys OK'
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" data export --output "$TEST_DIR/records.json"
+          grep -F '"format_version": 1' "$TEST_DIR/records.json"
+          ./target/debug/pos --db "$TEST_DIR/tasks.sqlite3" data backup "$TEST_DIR/backup.sqlite3"
+          ./target/debug/pos data restore "$TEST_DIR/backup.sqlite3" --output "$TEST_DIR/recovered.sqlite3"
+          ./target/debug/pos --db "$TEST_DIR/recovered.sqlite3" data check | grep -F 'integrity and foreign keys OK'
+          ./target/debug/pos --db "$TEST_DIR/recovered.sqlite3" tasks list --all | grep -F 'CI task'
           ./target/debug/pos-server | grep -F "server scaffold"

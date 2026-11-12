@@ -10,7 +10,7 @@ pos-storage = { path = "../pos-storage" }
 pos-tasks = { path = "../../modules/pos-tasks" }
 pos-projects = { path = "../../modules/pos-projects" }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros"] }

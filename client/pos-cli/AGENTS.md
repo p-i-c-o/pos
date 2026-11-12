@@ -13,4 +13,4 @@ Do not implement module business rules here. Route operations through shared cor
 ## Verification
 
 Future tests should cover argument parsing, exit codes and non-interactive output.
-The pos executable supports Tasks and Projects subcommands and launches Ratatui. Use shared services and keep all database I/O off the TUI thread.
+The pos executable supports Tasks, Projects and Data commands and launches Ratatui. Route operations to shared services and SQLite maintenance; do not add database logic to rendering or block the TUI thread.

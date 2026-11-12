@@ -1,18 +1,19 @@
 //! POS executable: interactive TUI and scriptable Tasks and Projects CLI.
 
 use clap::{Parser, Subcommand};
-use pos_core::{ProjectService, TaskService};
-use pos_sqlite::SqliteTaskRepository;
+use pos_core::{ProjectService, TaskService, export_local_data};
+use pos_sqlite::{SqliteMaintenance, SqliteTaskRepository};
 use pos_tui::{UiRequest, UiResponse};
 use std::{
     env,
     error::Error,
-    io::{self, IsTerminal},
-    path::PathBuf,
+    io::{self, IsTerminal, Write},
+    path::{Path, PathBuf},
     process::ExitCode,
     sync::mpsc,
     thread,
 };
+use tempfile::Builder;
 
 #[derive(Parser)]
 #[command(
@@ -41,6 +42,36 @@ enum Commands {
         #[command(subcommand)]
         action: ProjectAction,
     },
+    /// Database integrity checks, lossless backup/restore and JSON export.
+    Data {
+        #[command(subcommand)]
+        action: DataAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum DataAction {
+    /// Create a consistent SQLite snapshot at a new path; never overwrite.
+    Backup {
+        /// New SQLite snapshot path.
+        output: PathBuf,
+    },
+    /// Validate and restore a backup to a NEW database path. Never overwrite.
+    Restore {
+        /// Existing POS SQLite backup file.
+        source: PathBuf,
+        /// New database path; the active database is never replaced.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Export tasks/projects as versioned JSON to stdout or a new file.
+    Export {
+        /// Save JSON to a new file rather than printing it.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Check SQLite integrity and foreign key consistency read-only.
+    Check,
 }
 
 #[derive(Subcommand)]
@@ -157,25 +188,35 @@ fn database_path(override_path: Option<PathBuf>) -> Result<PathBuf, Box<dyn Erro
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
-    if cli.command.is_none() && (!io::stdin().is_terminal() || !io::stdout().is_terminal()) {
+    let Cli { db, command } = cli;
+    if command.is_none() && (!io::stdin().is_terminal() || !io::stdout().is_terminal()) {
         return Err("POS needs an interactive terminal. Run 'pos --help' for usage.".into());
     }
 
-    let path = database_path(cli.db)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
+
+    // Maintenance runs before opening the normal repository. In particular,
+    // restore must never create or migrate the active POS database.
+    let command = match command {
+        Some(Commands::Data { action }) => return runtime.block_on(run_data(db, action)),
+        other => other,
+    };
+
+    let path = database_path(db)?;
     let repository = runtime.block_on(SqliteTaskRepository::open(&path))?;
     let tasks = TaskService::new(repository.clone());
     let projects = ProjectService::new(repository);
 
-    match cli.command {
+    match command {
         Some(Commands::Tasks { action }) => {
             runtime.block_on(run_tasks(&tasks, action))?;
         }
         Some(Commands::Projects { action }) => {
             runtime.block_on(run_projects(&projects, action))?;
         }
+        Some(Commands::Data { .. }) => unreachable!("maintenance handled before repository open"),
         None => {
             let (request_tx, request_rx) = mpsc::channel();
             let (response_tx, response_rx) = mpsc::channel();
@@ -198,6 +239,78 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             result?;
         }
     }
+    Ok(())
+}
+
+async fn run_data(db: Option<PathBuf>, action: DataAction) -> Result<(), Box<dyn Error>> {
+    match action {
+        DataAction::Restore { source, output } => {
+            if db.is_some() {
+                return Err(
+                    "--db does not apply to restore; use --output for the new database".into(),
+                );
+            }
+            SqliteMaintenance::restore(&source, &output).await?;
+            println!("Verified and restored database to {}", output.display());
+        }
+        DataAction::Backup { output } => {
+            let source = database_path(db)?;
+            SqliteMaintenance::backup(&source, &output).await?;
+            println!("Verified SQLite backup: {}", output.display());
+        }
+        DataAction::Check => {
+            let path = database_path(db)?;
+            SqliteMaintenance::check(&path).await?;
+            println!("SQLite integrity and foreign keys OK: {}", path.display());
+        }
+        DataAction::Export { output } => {
+            let path = database_path(db)?;
+            if !path.is_file() {
+                return Err(format!("POS database not found: {}", path.display()).into());
+            }
+            // Export is strictly read-only and does not run any migrations.
+            // Both SELECTs share a consistent database read transaction.
+            let repository = SqliteTaskRepository::open_read_only(&path).await?;
+            let snapshot = export_local_data(&repository).await?;
+            let mut content = serde_json::to_vec_pretty(&snapshot)?;
+            content.push(b'\n');
+            if let Some(output) = output {
+                write_export_noclobber(&output, &content)?;
+                eprintln!("Exported POS JSON to {}", output.display());
+            } else {
+                io::stdout().lock().write_all(&content)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Files are only published after serialization and fsync, with no-overwrite
+/// semantics even if another process creates the destination concurrently.
+fn write_export_noclobber(path: &Path, content: &[u8]) -> Result<(), Box<dyn Error>> {
+    if std::fs::symlink_metadata(path).is_ok() {
+        return Err(format!("destination already exists: {}", path.display()).into());
+    }
+    let directory = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    if !directory.is_dir() {
+        return Err(format!(
+            "destination directory does not exist: {}",
+            directory.display()
+        )
+        .into());
+    }
+
+    let mut staging = Builder::new()
+        .prefix(".pos-export-")
+        .tempfile_in(directory)?;
+    staging.write_all(content)?;
+    staging.as_file().sync_all()?;
+    let published = staging.persist_noclobber(path)?;
+    published.sync_all()?;
+    std::fs::File::open(directory)?.sync_all()?;
     Ok(())
 }
 
