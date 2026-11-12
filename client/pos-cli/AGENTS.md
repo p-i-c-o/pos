@@ -13,4 +13,4 @@ Do not implement module business rules here. Route operations through shared cor
 ## Verification
 
 Future tests should cover argument parsing, exit codes and non-interactive output.
-The pos executable can launch the Ratatui shell and expose help/version; operational commands remain unimplemented.
+The pos executable supports local Tasks subcommands and launches Ratatui. Keep parsing separate from TaskService and avoid blocking the TUI thread.

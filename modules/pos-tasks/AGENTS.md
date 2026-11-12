@@ -13,4 +13,4 @@ Enforce scoped access and avoid direct writes into projects or calendars.
 ## Verification
 
 Future tests should cover state transitions, recurrence and permission enforcement.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+The task domain has validation and a basic title, due date and completion model; assignments, priority and recurrence are still planned.

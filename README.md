@@ -4,8 +4,8 @@
 
 <p align="center">
   <!-- STATUS BADGES: enable one appropriate status -->
-  <img alt="Status: Planning" src="https://img.shields.io/badge/Status-Planning-lightgrey">
-  <!-- <img alt="Status: In Progress" src="https://img.shields.io/badge/Status-In%20Progress-blue"> -->
+  <!-- <img alt="Status: Planning" src="https://img.shields.io/badge/Status-Planning-lightgrey"> -->
+  <img alt="Status: In Progress" src="https://img.shields.io/badge/Status-In%20Progress-blue">
   <!-- <img alt="Status: Prototype" src="https://img.shields.io/badge/Status-Prototype-blueviolet"> -->
   <!-- <img alt="Status: Beta" src="https://img.shields.io/badge/Status-Beta-yellow"> -->
   <!-- <img alt="Status: Stable" src="https://img.shields.io/badge/Status-Stable-brightgreen"> -->
@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Early implementation. The POS client has a working Ratatui terminal shell, but no operational modules, storage or server services are implemented.
+**Status:** Early implementation. Local Tasks is the first working module, with shared application operations, SQLite persistence, CLI commands and a Ratatui task list. The server and other modules remain placeholders.
 
 ## Overview
 
@@ -78,30 +78,37 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**TUI shell only.** The POS client launches an interactive Ratatui screen in a terminal. All operational modules remain placeholders; no server listeners or storage backends exist yet.
+**Working:** Local Tasks with SQLite storage through SQLx, shared CLI/TUI operations and an interactive Ratatui task list. Other application modules, the server, multiuser permissions, and cross-device synchronisation are **not implemented**.
 
-TUI shortcuts: `j/k`, `arrow keys`, `?`, `q`, `Esc`, `Ctrl+C` for navigation, help and exiting (as shown on screen).
-
-Install Rust through rustup if needed. The repository's rust-toolchain.toml selects Rust 1.99.1 with rustfmt and Clippy.
+Install Rust via rustup if needed; the repository pins Rust 1.99.1.
 
 ```sh
-cargo run --locked -p pos-cli --bin pos
-cargo run --locked -p pos-cli --bin pos -- --help
-cargo run --locked -p pos-server
+cargo build --locked -p pos-cli
+./target/debug/pos                         # Interactive POS (requires a terminal)
+./target/debug/pos tasks add "Finish report" --due 2026-12-17
+./target/debug/pos tasks list
+./target/debug/pos tasks list --all --json
+./target/debug/pos tasks show 1
+./target/debug/pos tasks edit 1 --title "Revised report" --clear-due
+./target/debug/pos tasks done 1
+./target/debug/pos tasks reopen 1
+./target/debug/pos tasks delete 1 --yes     # Permanently deletes one task
+```
+
+Tasks are stored **only on the local device**, by default at `$XDG_DATA_HOME/pos/pos.sqlite3` or `~/.local/share/pos/pos.sqlite3` when XDG_DATA_HOME is unset. Override the database with `--db /path/to/pos.sqlite3` (before or after the subcommand) or `POS_DB_PATH=/path/to/pos.sqlite3`. POS automatically creates its default data directory and SQLite database and applies versioned schema migrations. Use a separate database file for POS rather than another application's SQLite database. No network connection is needed.
+
+In Ratatui, select **Tasks** with `j/k` or arrows and press `Enter` to focus the task list. Inside Tasks: `j/k` navigate tasks, `a` adds, `e` edits titles, `d` sets/clears due dates, `Space` toggles completion, `x` asks for deletion confirmation, and `Esc` returns to navigation. `?` opens help, `r` refreshes and `q` quits. Task operations run on a worker thread so SQLite I/O does not block the keyboard event loop. Other modules remain navigable placeholders.
+
+### Development verification
+
+```sh
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo build --workspace --locked
 ```
 
-Future POS feature commands (illustrative, **not implemented**):
-
-```sh
-pos tasks
-pos projects
-pos tasks add "Review report" --project university
-pos tasks list --json
-```
+Future POS features, **not implemented yet**, include `pos projects`, task-to-project relationships, calendar scheduling and server synchronisation.
 
 ## Repo Layout
 
@@ -211,7 +218,7 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Background work | Rust scheduler/worker and persistent database-backed jobs |
 | Service supervision | systemd on Linux |
 
-These are current design choices, not installed or benchmarked components. Performance goals include rapid startup, non-blocking navigation and low resource usage.
+Ratatui, Clap, SQLite and SQLx are used for local Tasks. Server components remain planned. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
 
 ## Roadmap
 
@@ -230,8 +237,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** The 27-crate Rust workspace, functional Ratatui terminal shell, CLI help/version, server placeholder, agent instructions and GitHub Actions CI configuration.
-- **What doesn't (yet):** No working feature commands, server listener, database schema, synchronisation or other operational application functionality is implemented.
+- **What works:** 27-crate workspace; locally persistent Tasks with creation/listing/editing/completion/reopening/deletion in CLI and Ratatui; SQLx migrations; CLI JSON output; tests and CI.
+- **What doesn't (yet):** Projects and other functional modules, a server listener, authentication, permissions, multiuser data isolation and cross-device synchronisation.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -239,12 +246,12 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
 - **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
-- **Software:** Interactive POS TUI shell and server placeholder only; no installation or production deployment is supported.
+- **Software:** Interactive local POS Tasks and a placeholder server; no installation or production multiuser deployment is supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
 ## How to Contribute
 
-POS is at the design stage. Use repository issues to propose changes or identify requirements. Before larger code contributions, agree on module boundaries, data models and security impact. Keep changes focused, documented and tested; never commit credentials.
+POS is in early implementation. Use repository issues to propose changes or identify requirements. Before larger code contributions, agree on module boundaries, data models and security impact. Keep changes focused, documented and tested; never commit credentials.
 
 ## License
 

@@ -13,4 +13,4 @@ Keep storage, network connections and business rules out of rendering. Do not bl
 ## Verification
 
 Future tests should cover navigation, rendering and terminal cleanup.
-The Ratatui terminal shell is implemented. All operational modules remain placeholders; do not imply they work.
+The Tasks panel is interactive. Send requests to the nonblocking CLI-owned worker and render responses; other modules remain placeholders.
