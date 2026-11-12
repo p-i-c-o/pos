@@ -3,6 +3,9 @@
 //! This crate deliberately does NOT implement task/project repositories or
 //! shared data access before authentication and tenant policy are defined.
 
+mod auth;
+pub use auth::{Identity, IdentityError, Login};
+
 use std::{error::Error, fmt, str::FromStr, time::Duration};
 
 use sqlx::{

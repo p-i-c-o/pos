@@ -6,7 +6,11 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros"] }
+pos-auth = { path = "../../core/pos-auth" }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid"] }
+tokio = { version = "1", features = ["rt"] }
+uuid = "1"
+zeroize = "1.9.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

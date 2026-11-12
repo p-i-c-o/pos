@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server now has development-only loopback health endpoints; data APIs, authentication and synchronization are not implemented.
+**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server has development-only loopback health endpoints; internal user/device authentication primitives and PostgreSQL credential storage are implemented, but HTTP login, business-data APIs, authorization and synchronization are not.
 
 ## Overview
 
@@ -78,7 +78,7 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. On develop, the server has a loopback-only health endpoint; multiuser permissions, business-data HTTP APIs and cross-device synchronisation are **not implemented**.
+**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. On develop, the server has a loopback-only health endpoint and trusted-only user/device identity primitives; HTTP authentication, multiuser permissions, business-data HTTP APIs and cross-device synchronisation are **not implemented**.
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
@@ -288,7 +288,7 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Background work | Rust scheduler/worker and persistent database-backed jobs |
 | Service supervision | systemd on Linux |
 
-Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server now provides loopback-only HTTP health/lifecycle infrastructure, but no business-data endpoints, authentication or persistence. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
+Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server provides loopback-only HTTP health/lifecycle infrastructure. PostgreSQL user/device authentication is implemented internally, but the server has no authentication routes, business-data endpoints or database integration. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
 
 ## Roadmap
 
@@ -307,8 +307,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback-only HTTP health server and isolated PostgreSQL connection/migration foundation (develop only), and CI.
-- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server database integration, server data APIs, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback-only HTTP health server, isolated PostgreSQL connection/migration foundation and trusted-only user/device credential primitives (develop only), and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server database integration, server data APIs, public authentication endpoints, authorization permissions, multiuser data isolation, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -344,6 +344,19 @@ metadata. PostgreSQL integration tests run against an isolated, disposable
 database in CI. **This is not yet wired into the Axum server, and stores no
 Tasks, Projects or user data.** See
 [PostgreSQL foundation details](docs/postgres-foundation.md).
+
+## User and device authentication foundation (Phase 9b)
+
+The development branch includes an internal-only identity layer:
+per-user Argon2id password hashing, canonical user accounts, device UUIDs,
+24-hour random bearer tokens stored only as hashes in PostgreSQL, and
+revocation/disablement checks. Integration tests run on a disposable
+PostgreSQL database.
+
+**There is no login, registration, password-provisioning or session endpoint
+in Axum yet.** Identity does not imply workspace authorization. Do not expose
+the current listener or assume multiuser data isolation. See
+[authentication architecture and limitations](docs/authentication-foundation.md).
 
 ## Branching and releases
 

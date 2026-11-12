@@ -2,7 +2,7 @@
 
 **Development milestone only.** This crate is not present in tagged v0.1.0
 as a functional server database. It is not yet wired into the Axum server,
-and it does not store Tasks, Projects, users, credentials or shared records.
+and it does not store Tasks, Projects or shared workspace records. Phase 9b adds trusted-only user/device credential storage.
 
 ## What it provides
 
@@ -21,7 +21,7 @@ The first migration creates just one POS-owned table:
 
 It inserts exactly one row for this database. SQLx also maintains
 `_sqlx_migrations`. Future migrations must design user/workspace ownership
-and authorization boundaries before storing business records.
+and authorization boundaries before storing business records. Phase 9b adds user, device and session tables in a separate migration.
 
 **Do not use this crate as a generic anonymous data repository.** There are no
 Task/Project repository implementations or HTTP business-data routes.
@@ -55,11 +55,11 @@ a production database.
 
 `cargo test -p pos-postgres --locked` runs unit tests without a database.
 
-One integration test needs an explicit `POS_TEST_DATABASE_URL` and refuses to
+Two integration tests need an explicit `POS_TEST_DATABASE_URL` and refuse to
 run against a database not named `pos_ci` or hosted outside localhost.
 On a matching disposable database, it concurrently opens two connection
 pools, tests migration locking/idempotence, verifies a stable instance UUID,
-and confirms that no users/projects/tasks/workspaces tables were created.
+and confirms that user/device/session tables exist while Tasks, Projects and workspace tables do not. The other tests password sign-in, device ownership, expiry and revocation.
 
 GitHub Actions starts an ephemeral `postgres:17-alpine` service with dedicated
 throwaway test credentials and runs this integration test. This does not
@@ -67,8 +67,7 @@ connect to or modify any homelab database.
 
 ## Next steps
 
-- Authentication and device identity design, including credential storage
-  and authorization policy tests.
+- Review the implemented identity and credential model, then add authenticated provisioning and account lifecycle interfaces behind rate limiting and HTTPS.
 - Tenant/workspace-scoped server tables and storage interfaces, after
   ownership rules are explicit.
 - Wire the authenticated server service to PostgreSQL.

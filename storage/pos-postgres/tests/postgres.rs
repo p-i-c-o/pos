@@ -48,17 +48,26 @@ async fn creates_and_reuses_instance_identity() {
             .await
             .unwrap();
     assert_eq!(
-        applied, 1,
-        "the initial migration must be applied exactly once"
+        applied, 2,
+        "both versioned migrations must be applied exactly once"
     );
 
-    for name in ["pos_users", "pos_workspaces", "pos_tasks", "pos_projects"] {
+    for name in ["pos_workspaces", "pos_tasks", "pos_projects"] {
         let exists: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
             .bind(name)
             .fetch_one(&raw)
             .await
             .unwrap();
         assert!(exists.is_none(), "unexpected business-data table: {name}");
+    }
+
+    for table in ["pos_users", "pos_devices", "pos_sessions"] {
+        let exists: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
+            .bind(table)
+            .fetch_one(&raw)
+            .await
+            .unwrap();
+        assert!(exists.is_some(), "expected identity table: {table}");
     }
 
     raw.close().await;

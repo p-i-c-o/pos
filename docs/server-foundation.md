@@ -1,6 +1,6 @@
 # POS HTTP server foundation
 
-Status: **development-only foundation** on `feature/server-foundation`.
+Status: **development-only foundation** (merged into `develop`).
 This is not part of the tagged POS v0.1.0 release. The server currently
 has **no Tasks/Projects APIs, no database, no user identity and no TLS**.
 
@@ -96,5 +96,7 @@ the **actual executable** on an ephemeral loopback port, checks JSON
 responses, rejects exposed listen addresses, tests SIGTERM/SIGINT, and
 verifies no POS user data was created or modified.
 
-Future milestones: authenticated API boundaries, persistent server storage
-(PostgreSQL when justified), device identity and eventual synchronization.
+Future milestones: connect authenticated identity and PostgreSQL to secure
+server APIs, establish workspace-scoped authorization and eventually synchronize.
+The identity and PostgreSQL storage crates now exist internally, but this
+server executable does not use or expose them.
