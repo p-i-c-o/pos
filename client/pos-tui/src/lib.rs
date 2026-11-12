@@ -435,7 +435,11 @@ fn render(frame: &mut Frame<'_>, app: &App) {
         .split(frame.area());
 
     let header = Paragraph::new(
-        Line::from(" Personal Organisation System   |   v0.0.0   |   local-first ").style(
+        Line::from(format!(
+            " Personal Organisation System   |   v{}   |   local-first ",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .style(
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
