@@ -1,5 +1,9 @@
-//! Local-only POS HTTP foundation. No unauthenticated data operations.
+//! Local-only POS HTTP foundation. Read-only workspace APIs require a
+//! configured PostgreSQL connection and a valid, active device-bound session.
 
+mod api;
+
+use pos_postgres::PostgresStore;
 use std::{fmt, future::Future, io, net::SocketAddr};
 
 use axum::{
@@ -93,12 +97,18 @@ async fn not_found() -> (StatusCode, Json<ErrorResponse>) {
     )
 }
 
-/// The versioned namespace is reserved for future authenticated APIs.
+/// Health-only router used when no PostgreSQL database is configured.
 pub fn router() -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/health", get(health))
         .fallback(not_found)
+}
+
+/// Adds authenticated read-only routes, while preserving health behavior.
+/// The store must have completed migrations before this router is created.
+pub fn router_with_store(store: PostgresStore) -> Router {
+    router().merge(api::routes(store))
 }
 
 /// Validate BEFORE opening a network listener.
@@ -122,8 +132,32 @@ pub async fn serve(
             "refusing to serve on a non-loopback listener",
         ));
     }
-    tracing::info!(%address, api_version = API_VERSION, "POS HTTP listening");
-    axum::serve(listener, router())
+    serve_with_store(listener, shutdown, None).await
+}
+
+/// Run the optional authenticated HTTP router on an already-bound loopback
+/// socket. No business data is exposed unless the database was configured.
+pub async fn serve_with_store(
+    listener: TcpListener,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+    store: Option<PostgresStore>,
+) -> io::Result<()> {
+    let address = listener.local_addr()?;
+    if !address.ip().is_loopback() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "refusing to serve on a non-loopback listener",
+        ));
+    }
+    let auth_enabled = store.is_some();
+    let closing_store = store.clone();
+    let app = store.map_or_else(router, router_with_store);
+    tracing::info!(%address, api_version = API_VERSION, auth_enabled, "POS HTTP listening");
+    let result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown)
-        .await
+        .await;
+    if let Some(store) = closing_store {
+        store.close().await;
+    }
+    result
 }

@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory(prefix="pos-server-smoke-") as temp:
     env["RUST_LOG"] = "pos_server=info"
     env.pop("POS_DB_PATH", None)
     env.pop("POS_SERVER_LISTEN", None)
+    env.pop("POS_SERVER_DATABASE_URL", None)  # Never connect smoke tests to a real DB.
 
     def expect_failure(arguments, *, environment=None):
         result = subprocess.run(
@@ -59,6 +60,15 @@ with tempfile.TemporaryDirectory(prefix="pos-server-smoke-") as temp:
     bad_env = dict(env, POS_SERVER_LISTEN="0.0.0.0:0")
     output = expect_failure([], environment=bad_env)
     check("refusing non-loopback" in output, f"Unsafe env listen was not rejected: {output}")
+
+    # A database opt-in must fail closed on bad configuration and cannot
+    # override listener isolation. This test never opens a real database.
+    bad_db = dict(env, POS_SERVER_DATABASE_URL="not-a-postgres-url")
+    output = expect_failure(["--listen", "127.0.0.1:0"], environment=bad_db)
+    check("InvalidConfiguration" in output, f"Invalid database URL accepted: {output}")
+    output = expect_failure(["--listen", "0.0.0.0:0"], environment=bad_db)
+    check("refusing non-loopback" in output, "Non-loopback listener was accepted")
+    check("database initialization failed" not in output, "DB opened before address validation")
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
         occupied.bind(("127.0.0.1", 0))

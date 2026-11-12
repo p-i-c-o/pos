@@ -1494,6 +1494,7 @@ name = "pos-postgres"
 version = "0.1.0"
 dependencies = [
  "pos-auth",
+ "pos-permissions",
  "sqlx",
  "tokio",
  "uuid",
@@ -1522,10 +1523,14 @@ dependencies = [
  "axum",
  "clap",
  "pos-core",
+ "pos-permissions",
+ "pos-postgres",
  "serde",
+ "sqlx",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -2597,6 +2602,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bed99139f7dac9b5cfe5f17be4d66dc7079a34dee1d74bcc77217119240e267c"
 dependencies = [
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

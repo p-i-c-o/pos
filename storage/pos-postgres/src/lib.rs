@@ -4,7 +4,9 @@
 //! shared data access before authentication and tenant policy are defined.
 
 mod auth;
+mod workspaces;
 pub use auth::{Identity, IdentityError, Login};
+pub use workspaces::{Workspace, WorkspaceError};
 
 use std::{error::Error, fmt, str::FromStr, time::Duration};
 

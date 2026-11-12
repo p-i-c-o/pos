@@ -12,5 +12,4 @@ No separate worker executable. All shared operations require authentication and 
 
 ## Verification
 
-Tests cover startup, loopback-only binding, health routes, graceful SIGINT/SIGTERM shutdown and failure handling. Worker lifecycle is still future work.
-The current server has no business APIs, authentication, database or synchronization; never expose it to remote clients.
+Tests cover startup, loopback-only binding, health routes, graceful shutdown and error handling. Optional PostgreSQL-backed GET-only identity and scoped workspace metadata endpoints validate active bearer sessions on each request. The server has no public login/registration, Tasks/Projects data APIs, worker jobs, remote access or sync. Never expose it to remote clients.

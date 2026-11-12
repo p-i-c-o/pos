@@ -12,5 +12,4 @@ Do not infer unrestricted access from organisational membership or managerial ti
 
 ## Verification
 
-Future tests should cover denial by default, delegation bounds and cross-workspace isolation.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+Tests cover deny-by-default access, distinct personal/shared roles, owner-only management and restrictions against implicit organisational privileges. The workspace role model currently covers owner, editor and viewer only. Nested organisations, role delegation and full RBAC/ABAC are not implemented.

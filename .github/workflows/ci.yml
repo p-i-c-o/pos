@@ -57,6 +57,11 @@ jobs:
           POS_TEST_DATABASE_URL: postgres://pos_ci:pos_ci_ephemeral_only@127.0.0.1:5432/pos_ci?sslmode=disable
         run: cargo test -p pos-postgres --test auth --locked -- --nocapture
 
+      - name: Test authenticated HTTP and cross-user workspace isolation
+        env:
+          POS_TEST_DATABASE_URL: postgres://pos_ci:pos_ci_ephemeral_only@127.0.0.1:5432/pos_ci?sslmode=disable
+        run: cargo test -p pos-server --test authenticated --locked -- --nocapture
+
       - name: Build workspace
         run: cargo build --workspace --locked
       - name: Smoke test CLI, SQLite Tasks and server
