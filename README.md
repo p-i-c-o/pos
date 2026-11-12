@@ -3,11 +3,41 @@
 > A fast, terminal-first, self-hosted platform for managing personal and organisational work in one in-house application.
 
 <p align="center">
+  <!-- STATUS BADGES: enable one appropriate status -->
   <img alt="Status: Planning" src="https://img.shields.io/badge/Status-Planning-lightgrey">
+  <!-- <img alt="Status: In Progress" src="https://img.shields.io/badge/Status-In%20Progress-blue"> -->
+  <!-- <img alt="Status: Prototype" src="https://img.shields.io/badge/Status-Prototype-blueviolet"> -->
+  <!-- <img alt="Status: Beta" src="https://img.shields.io/badge/Status-Beta-yellow"> -->
+  <!-- <img alt="Status: Stable" src="https://img.shields.io/badge/Status-Stable-brightgreen"> -->
+  <!-- <img alt="Status: Completed" src="https://img.shields.io/badge/Status-Completed-brightgreen"> -->
+  <!-- <img alt="Status: Completed, docs WIP" src="https://img.shields.io/badge/Status-Completed%2C%20docs%20WIP-blue"> -->
+  <!-- <img alt="Status: Maintenance" src="https://img.shields.io/badge/Status-Maintenance-informational"> -->
+  <!-- <img alt="Status: Archived" src="https://img.shields.io/badge/Status-Archived-9f9f9f"> -->
+  <!-- <img alt="Status: On Hold" src="https://img.shields.io/badge/Status-On%20Hold-orange"> -->
+  <!-- <img alt="Status: Deprecated" src="https://img.shields.io/badge/Status-Deprecated-red"> -->
+  <!-- <img alt="Status: Broken" src="https://img.shields.io/badge/Status-Broken-critical"> -->
+  <!-- <img alt="Status: Experimental" src="https://img.shields.io/badge/Status-Experimental-purple"> -->
+  <!-- CATEGORY BADGES: enable relevant categories -->
+  <!-- <img alt="Category: Hardware" src="https://img.shields.io/badge/Category-Hardware-6f42c1"> -->
   <img alt="Category: Software" src="https://img.shields.io/badge/Category-Software-0366d6">
+  <!-- <img alt="Category: Firmware" src="https://img.shields.io/badge/Category-Firmware-0e8a16"> -->
+  <!-- <img alt="Category: Electronics" src="https://img.shields.io/badge/Category-Electronics-ff9500"> -->
+  <!-- <img alt="Category: IoT" src="https://img.shields.io/badge/Category-IoT-00bcd4"> -->
+  <!-- <img alt="Category: Home Assistant" src="https://img.shields.io/badge/Category-Home%20Assistant-41bdf5"> -->
+  <!-- <img alt="Category: ESPHome" src="https://img.shields.io/badge/Category-ESPHome-000000"> -->
+  <!-- <img alt="Category: 3D Printing" src="https://img.shields.io/badge/Category-3D%20Printing-8a2be2"> -->
+  <!-- <img alt="Category: CAD" src="https://img.shields.io/badge/Category-CAD-4b5563"> -->
+  <!-- <img alt="Category: Networking" src="https://img.shields.io/badge/Category-Networking-2ea44f"> -->
+  <!-- <img alt="Category: DevOps" src="https://img.shields.io/badge/Category-DevOps-24292e"> -->
   <img alt="Category: Self-Hosting" src="https://img.shields.io/badge/Category-Self--Hosting-1f6feb">
+  <!-- <img alt="Category: Mixed" src="https://img.shields.io/badge/Category-Mixed-lightgrey"> -->
+  <!-- <img alt="Category: Research" src="https://img.shields.io/badge/Category-Research-7c3aed"> -->
+  <!-- <img alt="Category: School" src="https://img.shields.io/badge/Category-School-ff69b4"> -->
+  <!-- META BADGES: update active version/date values as needed -->
   <img alt="Version: 0.0.0" src="https://img.shields.io/badge/Version-0.0.0-orange">
   <img alt="Updated: 2026-11-12" src="https://img.shields.io/badge/Updated-2026--11--12-brightgreen">
+  <!-- <img alt="Version" src="https://img.shields.io/badge/Version-x.x.x-orange"> -->
+  <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
 **Status:** Architecture and planning. No working POS implementation or installation procedure exists yet.
