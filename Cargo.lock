@@ -1182,19 +1182,19 @@ checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
 name = "pos-auth"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-calendar"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-chat"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "clap",
  "pos-core",
@@ -1209,11 +1209,11 @@ dependencies = [
 
 [[package]]
 name = "pos-contacts"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pos-projects",
  "pos-storage",
@@ -1223,73 +1223,73 @@ dependencies = [
 
 [[package]]
 name = "pos-entities"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-events"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-files"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-git"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-github"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-gitlab"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-jobs"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-mail"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-notes"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-permissions"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-postgres"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-projects"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "pos-protocol"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-search"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-server"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pos-core",
 ]
 
 [[package]]
 name = "pos-sqlite"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pos-projects",
  "pos-storage",
@@ -1301,7 +1301,7 @@ dependencies = [
 
 [[package]]
 name = "pos-storage"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "pos-projects",
  "pos-tasks",
@@ -1309,11 +1309,11 @@ dependencies = [
 
 [[package]]
 name = "pos-sync"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-tasks"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1322,11 +1322,11 @@ dependencies = [
 
 [[package]]
 name = "pos-time"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "pos-tui"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "crossterm",
  "pos-projects",

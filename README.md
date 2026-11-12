@@ -34,7 +34,7 @@
   <!-- <img alt="Category: Research" src="https://img.shields.io/badge/Category-Research-7c3aed"> -->
   <!-- <img alt="Category: School" src="https://img.shields.io/badge/Category-School-ff69b4"> -->
   <!-- META BADGES: update active version/date values as needed -->
-  <img alt="Version: 0.0.0" src="https://img.shields.io/badge/Version-0.0.0-orange">
+  <img alt="Release candidate: 0.1.0" src="https://img.shields.io/badge/Version-0.1.0--rc-orange">
   <img alt="Updated: 2026-11-12" src="https://img.shields.io/badge/Updated-2026--11--12-brightgreen">
   <!-- <img alt="Version" src="https://img.shields.io/badge/Version-x.x.x-orange"> -->
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
@@ -81,6 +81,23 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 **Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. The server, multiuser permissions and cross-device synchronisation are **not implemented**.
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
+
+**Local Linux installation (release candidate):**
+
+```sh
+bash scripts/install-local.sh
+~/.local/bin/pos --version
+# To explicitly replace a previously installed POS binary:
+bash scripts/install-local.sh --upgrade
+```
+
+The installer builds from this source checkout, installs the client to
+~/.local/bin/pos (or an alternative directory using --prefix), and never
+silently overwrites an existing executable. It does not change PATH, require
+sudo, or modify the SQLite database. An upgrade can apply SQLx migrations
+when POS next starts, so back up existing data beforehand. See
+[installation and release notes](docs/releases/0.1.0.md).
+For the unreleased candidate, you can also build and run POS directly:
 
 ```sh
 cargo build --locked -p pos-cli
@@ -144,14 +161,22 @@ SQLite backups are consistent even with live WAL writes using SQLite's VACUUM IN
 
 See [local backup and recovery procedures](docs/data-recovery.md) for failure handling, safe recovery steps and current limitations.
 
-### Development verification
+### Development and release verification
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo build --workspace --locked
+cargo build --release --locked -p pos-cli --bin pos
+bash scripts/release-smoke.sh
 ```
+
+The release smoke script uses an isolated temporary HOME/XDG data directory,
+creates a new test SQLite database, and verifies Tasks, Projects, data export,
+backup, restore and overwrite refusal without touching existing POS data.
+The release branch is **not a published release**: no v0.1.0 tag or deployment
+artifact exists until the release PR is merged and tagging is authorized.
 
 Future features include multiuser permissions, calendar scheduling and server synchronisation.
 
@@ -267,7 +292,7 @@ Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. Server com
 
 ## Roadmap
 
-- [ ] **v0.1 - Local prototype:** TUI, CLI, local SQLite, tasks and projects.
+- [ ] **v0.1 - Local prototype:** Release candidate prepared with TUI, CLI, local SQLite, tasks and projects; awaiting release PR merge and tag.
 - [ ] **v0.2 - Connectivity:** Server API, accounts, device identity and basic synchronisation.
 - [ ] **v0.3 - Shared information:** Notes, files, entity relationships and universal search.
 - [ ] **v0.4 - Planning:** Calendar, reminders and background jobs.
@@ -291,7 +316,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
 - **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
-- **Software:** Interactive local POS Tasks and Projects plus a placeholder server; no installation or production multiuser deployment is supported.
+- **Software:** Local POS Tasks and Projects with an optional source-built Linux client installer; no binary packages, running server or production multiuser deployment are supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
 ## Branching and releases
