@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Architecture and planning. No working POS implementation or installation procedure exists yet.
+**Status:** Architecture and planning. A compiling Rust workspace scaffold exists, but no POS features or server services are implemented.
 
 ## Overview
 
@@ -78,13 +78,20 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Not available yet.** This repository currently contains the project README and no runnable POS application.
+**Scaffold only.** The two executables print placeholder messages; no actual POS commands, TUI screens, server listeners or storage backends exist yet.
 
-1. Review the architecture and initial milestones below.
-2. Start with the local TUI, tasks and projects prototype.
-3. Add build and installation instructions here once working code exists.
+Install Rust through rustup if needed. The repository's rust-toolchain.toml selects Rust 1.99.1 with rustfmt and Clippy.
 
-Planned command forms (illustrative, **not implemented**):
+```sh
+cargo run --locked -p pos-cli --bin pos
+cargo run --locked -p pos-server
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --locked
+cargo build --workspace --locked
+```
+
+Future POS commands (illustrative, **not implemented**):
 
 ```sh
 pos
@@ -96,23 +103,58 @@ pos tasks list --json
 
 ## Repo Layout
 
-The following is the **proposed**, not yet created, Rust workspace layout:
+The repository contains one Cargo workspace with **27 Rust crates**, organised by responsibility. Each crate has its own Cargo.toml, src/ and AGENTS.md.
 
 ```text
 pos/
-├── client/       # TUI and CLI
-├── core/         # Entities, commands, permissions, relationships, events
-├── modules/      # Mail, tasks, projects, calendar, notes, Git, etc.
-├── server/       # Network API, scheduler and workers
-├── storage/      # PostgreSQL, SQLite, files and repositories
-└── sync/         # Change tracking, queues and conflict handling
+├── AGENTS.md
+├── README.md
+├── Cargo.toml
+├── Cargo.lock
+├── rust-toolchain.toml
+├── rustfmt.toml
+├── .gitignore
+├── .github/workflows/ci.yml
+├── client/
+│   ├── pos-cli/          # pos executable
+│   └── pos-tui/          # Terminal UI library
+├── server/
+│   └── pos-server/       # pos-server executable and future workers
+├── core/
+│   ├── pos-core/
+│   ├── pos-entities/
+│   ├── pos-events/
+│   ├── pos-protocol/
+│   ├── pos-auth/
+│   ├── pos-permissions/
+│   └── pos-jobs/
+├── storage/
+│   ├── pos-storage/
+│   ├── pos-sqlite/
+│   └── pos-postgres/
+├── sync/
+│   └── pos-sync/
+└── modules/
+    ├── pos-mail/
+    ├── pos-calendar/
+    ├── pos-tasks/
+    ├── pos-projects/
+    ├── pos-notes/
+    ├── pos-files/
+    ├── pos-contacts/
+    ├── pos-time/
+    ├── pos-chat/
+    ├── pos-search/
+    ├── pos-git/
+    ├── pos-github/
+    └── pos-gitlab/
 ```
 
-These are logical areas; actual Rust crates and package boundaries will be chosen during implementation.
+Crates currently contain minimal compiling placeholders, not functional implementations. AI and advanced automation crates are intentionally absent.
 
 ## Docs
 
-No separate documentation files have been created yet. Architectural decisions are summarised below; future detailed guides should cover:
+Root and per-crate AGENTS.md files document development boundaries. Architectural decisions are summarised below; future detailed guides should cover:
 
 - **How it works:** Core entities, module boundaries, relationships and events.
 - **Build / Installation:** Development, compilation, server deployment and client installation.
@@ -186,16 +228,16 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** Architecture and initial implementation approach have been discussed and approved.
-- **What doesn't (yet):** No source code, TUI, server, database schema or synchronisation is implemented.
+- **What works:** The 27-crate Rust workspace, placeholder executables, agent instructions and GitHub Actions CI configuration.
+- **What doesn't (yet):** No usable TUI, commands, server listener, database schema, synchronisation or other application functionality is implemented.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
 ## Requirements
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
-- **Tools (planned):** Rust toolchain, Cargo, Git and a terminal; PostgreSQL for server development.
-- **Software:** Cross-platform terminal client and POS server, to be developed.
+- **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
+- **Software:** Compiling client and server placeholders only; no installation or production deployment is supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
 ## How to Contribute

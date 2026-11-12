@@ -1,0 +1,27 @@
+name: Rust workspace CI
+
+on:
+  push:
+    branches: ["main", "docs/**", "feature/**", "fix/**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run tests
+        run: cargo test --workspace --locked
+      - name: Build workspace
+        run: cargo build --workspace --locked
+      - name: Smoke test both binaries
+        run: |
+          cargo run --quiet --locked -p pos-cli --bin pos | grep -F "scaffold"
+          cargo run --quiet --locked -p pos-server | grep -F "scaffold"
