@@ -13,4 +13,4 @@ Avoid module-specific persistence, terminal rendering or direct external provide
 ## Verification
 
 Future tests should cover operation validation and consistent error handling.
-TaskService, ProjectService and versioned LocalDataExport implement shared operations. No UI or SQL belongs here.
+TaskService provides validated atomic TaskEdit and TaskSearch operations, ProjectService handles projects, and versioned LocalDataExport exposes data. No UI or SQL belongs here.

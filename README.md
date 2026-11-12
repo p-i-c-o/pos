@@ -34,7 +34,7 @@
   <!-- <img alt="Category: Research" src="https://img.shields.io/badge/Category-Research-7c3aed"> -->
   <!-- <img alt="Category: School" src="https://img.shields.io/badge/Category-School-ff69b4"> -->
   <!-- META BADGES: update active version/date values as needed -->
-  <img alt="Version: 0.0.0" src="https://img.shields.io/badge/Version-0.0.0-orange">
+  <img alt="Release candidate: 0.1.0" src="https://img.shields.io/badge/Version-0.1.0--rc-orange">
   <img alt="Updated: 2026-11-12" src="https://img.shields.io/badge/Updated-2026--11--12-brightgreen">
   <!-- <img alt="Version" src="https://img.shields.io/badge/Version-x.x.x-orange"> -->
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
@@ -82,6 +82,23 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
+**Local Linux installation (release candidate):**
+
+```sh
+bash scripts/install-local.sh
+~/.local/bin/pos --version
+# To explicitly replace a previously installed POS binary:
+bash scripts/install-local.sh --upgrade
+```
+
+The installer builds from this source checkout, installs the client to
+~/.local/bin/pos (or an alternative directory using --prefix), and never
+silently overwrites an existing executable. It does not change PATH, require
+sudo, or modify the SQLite database. An upgrade can apply SQLx migrations
+when POS next starts, so back up existing data beforehand. See
+[installation and release notes](docs/releases/0.1.0.md).
+For the unreleased candidate, you can also build and run POS directly:
+
 ```sh
 cargo build --locked -p pos-cli
 ./target/debug/pos                            # Open the interactive TUI
@@ -107,7 +124,26 @@ Projects use a **stable unique slug** (for example, `university-work`) which doe
 
 **Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open that project's filtered tasks. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
 
-Projects currently provide **one-to-many task grouping only**. Project membership, permissions, task priorities, recurrence, subprojects, calendar integration and server sync are not implemented.
+Projects currently provide **one-to-many task grouping only**. Project membership, permissions, recurrence, subprojects, calendar integration and server sync are not implemented.
+
+### Task Engine v2
+
+Local tasks now support **priorities** (low, normal, high, urgent), **statuses** (todo, in-progress, blocked, completed), and optional multiline descriptions. Existing tasks automatically migrate to normal priority, with existing completed tasks mapped to completed status. The legacy boolean completed flag remains consistent with the status for CLI and Ratatui compatibility.
+
+```sh
+./target/debug/pos tasks add "Write report" --priority high --status in-progress --description "Draft the introduction"
+./target/debug/pos tasks edit 1 --priority urgent --status blocked --description "Waiting for review"
+./target/debug/pos tasks edit 1 --clear-description
+./target/debug/pos tasks list --search "report" --sort priority
+./target/debug/pos tasks list --priority high --status blocked --project university
+./target/debug/pos tasks list --due-before 2026-12-17 --sort due
+./target/debug/pos tasks list --status completed --json
+./target/debug/pos tasks list --all --sort created
+```
+
+Search matches a case-insensitive substring of the title or description (ASCII case-folding for SQLite's built-in lower function); percent and underscore are treated literally. Due-before is inclusive. Priority sort places urgent first; created sort places the newest task first. The default list hides completed tasks except when explicitly filtering for completed. Done/reopen still work and keep both completion representations consistent.
+
+All changes are validated and applied through the shared task engine and SQLx repository; multi-field edits are **atomic**, including project reassignment. The SQLite migration adds columns and indexes to existing databases without dropping tasks. JSON export is now format_version 2 and includes the new fields. **The Ratatui layout has not changed**; the new metadata is currently managed through the CLI.
 
 ### Local data safety
 
@@ -125,14 +161,22 @@ SQLite backups are consistent even with live WAL writes using SQLite's VACUUM IN
 
 See [local backup and recovery procedures](docs/data-recovery.md) for failure handling, safe recovery steps and current limitations.
 
-### Development verification
+### Development and release verification
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo build --workspace --locked
+cargo build --release --locked -p pos-cli --bin pos
+bash scripts/release-smoke.sh
 ```
+
+The release smoke script uses an isolated temporary HOME/XDG data directory,
+creates a new test SQLite database, and verifies Tasks, Projects, data export,
+backup, restore and overwrite refusal without touching existing POS data.
+The release branch is **not a published release**: no v0.1.0 tag or deployment
+artifact exists until the release PR is merged and tagging is authorized.
 
 Future features include multiuser permissions, calendar scheduling and server synchronisation.
 
@@ -248,7 +292,7 @@ Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. Server com
 
 ## Roadmap
 
-- [ ] **v0.1 - Local prototype:** TUI, CLI, local SQLite, tasks and projects.
+- [ ] **v0.1 - Local prototype:** Release candidate prepared with TUI, CLI, local SQLite, tasks and projects; awaiting release PR merge and tag.
 - [ ] **v0.2 - Connectivity:** Server API, accounts, device identity and basic synchronisation.
 - [ ] **v0.3 - Shared information:** Notes, files, entity relationships and universal search.
 - [ ] **v0.4 - Planning:** Calendar, reminders and background jobs.
@@ -263,8 +307,8 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks and CI.
-- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, a server listener, authentication, permissions, multiuser data isolation, priorities, recurrence and cross-device sync.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks and CI.
+- **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, a server listener, authentication, permissions, multiuser data isolation, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
 
@@ -272,7 +316,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 - **Hardware:** Development machine initially; self-hosted server and optional fallback hosts later.
 - **Tools:** Rust 1.99.1 (pinned by rust-toolchain.toml), Cargo, Git and a terminal. PostgreSQL will be needed for future server development.
-- **Software:** Interactive local POS Tasks and Projects plus a placeholder server; no installation or production multiuser deployment is supported.
+- **Software:** Local POS Tasks and Projects with an optional source-built Linux client installer; no binary packages, running server or production multiuser deployment are supported.
 - **Skills assumed:** Basic terminal/Git use for contributors; Rust and systems/database fundamentals for implementation.
 
 ## Branching and releases

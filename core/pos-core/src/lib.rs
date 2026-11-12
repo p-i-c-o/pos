@@ -2,7 +2,9 @@
 
 use pos_projects::{NewProject, Project, validate_name, validate_slug};
 use pos_storage::{ProjectRepository, SnapshotRepository, StorageError, TaskRepository};
-use pos_tasks::{NewTask, Task, TaskPatch, ValidationError};
+use pos_tasks::{
+    NewTask, Task, TaskPatch, TaskPriority, TaskQuery, TaskSort, TaskStatus, ValidationError,
+};
 use std::{error::Error, fmt};
 
 pub const PRODUCT_NAME: &str = "POS";
@@ -38,6 +40,29 @@ impl From<StorageError> for TaskError {
     }
 }
 
+/// Validated search criteria shared by the CLI and future clients.
+#[derive(Default)]
+pub struct TaskSearch<'a> {
+    pub include_completed: bool,
+    pub project_slug: Option<&'a str>,
+    pub search: Option<&'a str>,
+    pub priority: Option<TaskPriority>,
+    pub status: Option<TaskStatus>,
+    pub due_before: Option<&'a str>,
+    pub sort: TaskSort,
+}
+
+/// A single atomic task edit, including optional project reassignment.
+#[derive(Default)]
+pub struct TaskEdit<'a> {
+    pub title: Option<&'a str>,
+    pub due_date: Option<Option<&'a str>>,
+    pub description: Option<Option<&'a str>>,
+    pub priority: Option<TaskPriority>,
+    pub status: Option<TaskStatus>,
+    pub project_slug: Option<Option<&'a str>>,
+}
+
 pub struct TaskService<R: TaskRepository> {
     repository: R,
 }
@@ -58,12 +83,50 @@ impl<R: TaskRepository + ProjectRepository> TaskService<R> {
         due_date: Option<&str>,
         project_slug: Option<&str>,
     ) -> Result<Task, TaskError> {
-        let mut task = NewTask::new(title, due_date)?;
+        self.add_detailed(
+            title,
+            due_date,
+            project_slug,
+            None,
+            TaskPriority::Normal,
+            TaskStatus::Todo,
+        )
+        .await
+    }
+
+    pub async fn add_detailed(
+        &self,
+        title: &str,
+        due_date: Option<&str>,
+        project_slug: Option<&str>,
+        description: Option<&str>,
+        priority: TaskPriority,
+        status: TaskStatus,
+    ) -> Result<Task, TaskError> {
+        let mut task = NewTask::with_details(title, due_date, description, priority, status)?;
         task.project_id = match project_slug {
             Some(slug) => Some(self.resolve_project(slug, false).await?),
             None => None,
         };
         Ok(self.repository.create(task).await?)
+    }
+
+    pub async fn search(&self, options: TaskSearch<'_>) -> Result<Vec<Task>, TaskError> {
+        // Validate all input before querying the repository.
+        let mut query = TaskQuery::new(
+            options.include_completed || options.status == Some(TaskStatus::Completed),
+            None,
+            options.search,
+            options.priority,
+            options.status,
+            options.due_before,
+            options.sort,
+        )?;
+        query.project_id = match options.project_slug {
+            Some(slug) => Some(self.resolve_project(slug, true).await?),
+            None => None,
+        };
+        Ok(self.repository.query_tasks(query).await?)
     }
 
     pub async fn list_for_project(
@@ -126,6 +189,29 @@ impl<R: TaskRepository + ProjectRepository> TaskService<R> {
     ) -> Result<Task, TaskError> {
         let id = check_id(id)?;
         let patch = TaskPatch::new(title, due_date)?;
+        self.repository
+            .update(id, patch)
+            .await?
+            .ok_or(TaskError::NotFound(id))
+    }
+
+    /// Validate and update all supplied task fields in a single SQL statement.
+    /// A project change is resolved before the write, avoiding partial edits.
+    pub async fn edit_full(&self, id: i64, edit: TaskEdit<'_>) -> Result<Task, TaskError> {
+        let id = check_id(id)?;
+        let mut patch = TaskPatch::full(
+            edit.title,
+            edit.due_date,
+            edit.description,
+            edit.priority,
+            edit.status,
+            edit.project_slug.map(|_| None),
+        )?;
+        patch.project_id = match edit.project_slug {
+            Some(Some(slug)) => Some(Some(self.resolve_project(slug, false).await?)),
+            Some(None) => Some(None),
+            None => None,
+        };
         self.repository
             .update(id, patch)
             .await?
@@ -275,7 +361,7 @@ pub async fn export_local_data<R: SnapshotRepository>(
 ) -> Result<LocalDataExport, StorageError> {
     let snapshot = repository.snapshot().await?;
     Ok(LocalDataExport {
-        format_version: 1,
+        format_version: 2,
         projects: snapshot.projects,
         tasks: snapshot.tasks,
     })

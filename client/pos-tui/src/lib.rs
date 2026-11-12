@@ -435,7 +435,11 @@ fn render(frame: &mut Frame<'_>, app: &App) {
         .split(frame.area());
 
     let header = Paragraph::new(
-        Line::from(" Personal Organisation System   |   v0.0.0   |   local-first ").style(
+        Line::from(format!(
+            " Personal Organisation System   |   v{}   |   local-first ",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .style(
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -642,6 +646,9 @@ mod tests {
         Task {
             id: 7,
             title: "Finish report".into(),
+            description: None,
+            priority: pos_tasks::TaskPriority::Normal,
+            status: pos_tasks::TaskStatus::Todo,
             due_date: Some("2026-12-17".into()),
             project_id: Some(5),
             completed: false,

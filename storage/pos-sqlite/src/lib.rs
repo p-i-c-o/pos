@@ -4,9 +4,9 @@ use pos_projects::{NewProject, Project};
 use pos_storage::{
     LocalSnapshot, ProjectRepository, SnapshotRepository, StorageError, TaskRepository,
 };
-use pos_tasks::{NewTask, Task, TaskPatch};
+use pos_tasks::{NewTask, Task, TaskPatch, TaskPriority, TaskQuery, TaskSort, TaskStatus};
 use sqlx::{
-    Row, SqlitePool,
+    QueryBuilder, Row, Sqlite, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow},
 };
 use std::path::Path;
@@ -54,25 +54,50 @@ fn storage_err(error: impl std::fmt::Display) -> StorageError {
 }
 
 fn row_to_task(row: SqliteRow) -> Result<Task, StorageError> {
-    Ok(Task {
+    let task = Task {
         id: row.try_get("id").map_err(storage_err)?,
         title: row.try_get("title").map_err(storage_err)?,
+        description: row.try_get("description").map_err(storage_err)?,
+        priority: row
+            .try_get::<String, _>("priority")
+            .map_err(storage_err)?
+            .parse::<TaskPriority>()
+            .map_err(storage_err)?,
+        status: row
+            .try_get::<String, _>("status")
+            .map_err(storage_err)?
+            .parse::<TaskStatus>()
+            .map_err(storage_err)?,
         due_date: row.try_get("due_date").map_err(storage_err)?,
         project_id: row.try_get("project_id").map_err(storage_err)?,
         completed: row.try_get::<i64, _>("completed").map_err(storage_err)? != 0,
         created_at: row.try_get("created_at").map_err(storage_err)?,
         updated_at: row.try_get("updated_at").map_err(storage_err)?,
-    })
+    };
+    if task.completed != (task.status == TaskStatus::Completed) {
+        return Err(StorageError(format!(
+            "task #{} has inconsistent completion status",
+            task.id
+        )));
+    }
+    Ok(task)
 }
 
-const TASK_COLUMNS: &str = "id, title, due_date, project_id, completed, created_at, updated_at";
+const TASK_COLUMNS: &str = "id, title, description, priority, status, due_date, project_id, completed, created_at, updated_at";
 
 impl TaskRepository for SqliteTaskRepository {
     async fn create(&self, task: NewTask) -> Result<Task, StorageError> {
-        let id = sqlx::query("INSERT INTO tasks (title, due_date, project_id) VALUES (?, ?, ?)")
+        let id = sqlx::query(
+            "INSERT INTO tasks (title, due_date, project_id, description, priority, status, completed)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
             .bind(&task.title)
             .bind(&task.due_date)
             .bind(task.project_id)
+            .bind(&task.description)
+            .bind(task.priority.as_str())
+            .bind(task.status.as_str())
+            .bind(task.status == TaskStatus::Completed)
             .execute(&self.pool)
             .await
             .map_err(storage_err)?
@@ -88,6 +113,64 @@ impl TaskRepository for SqliteTaskRepository {
         );
         sqlx::query(&sql)
             .bind(include_completed)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage_err)?
+            .into_iter()
+            .map(row_to_task)
+            .collect()
+    }
+
+    async fn query_tasks(&self, query: TaskQuery) -> Result<Vec<Task>, StorageError> {
+        // All untrusted user inputs are bound parameters. Only fixed, known
+        // ORDER BY expressions are selected based on a validated enum.
+        let mut statement =
+            QueryBuilder::<Sqlite>::new(format!("SELECT {TASK_COLUMNS} FROM tasks WHERE 1=1"));
+        if !query.include_completed {
+            statement.push(" AND completed = 0");
+        }
+        if let Some(project_id) = query.project_id {
+            statement.push(" AND project_id = ").push_bind(project_id);
+        }
+        if let Some(priority) = query.priority {
+            statement
+                .push(" AND priority = ")
+                .push_bind(priority.as_str());
+        }
+        if let Some(status) = query.status {
+            statement.push(" AND status = ").push_bind(status.as_str());
+        }
+        if let Some(due_before) = query.due_before {
+            statement.push(" AND due_date <= ").push_bind(due_before);
+        }
+        if let Some(search) = query.search {
+            // instr() treats '%' and '_' literally, unlike a LIKE pattern.
+            statement
+                .push(" AND (instr(lower(title), lower(")
+                .push_bind(search.clone())
+                .push(")) > 0 OR instr(lower(coalesce(description, '')), lower(")
+                .push_bind(search)
+                .push(")) > 0)");
+        }
+
+        statement.push(" ORDER BY completed ASC, ");
+        match query.sort {
+            TaskSort::Due => {
+                statement.push("due_date IS NULL ASC, due_date ASC, id ASC");
+            }
+            TaskSort::Priority => {
+                statement.push(
+                    "CASE priority WHEN 'urgent' THEN 4 WHEN 'high' THEN 3
+                     WHEN 'normal' THEN 2 ELSE 1 END DESC,
+                     due_date IS NULL ASC, due_date ASC, id ASC",
+                );
+            }
+            TaskSort::Created => {
+                statement.push("created_at DESC, id DESC");
+            }
+        }
+        statement
+            .build()
             .fetch_all(&self.pool)
             .await
             .map_err(storage_err)?
@@ -154,11 +237,25 @@ impl TaskRepository for SqliteTaskRepository {
         // Changes are atomic. title and date are separately optional, and date can be cleared.
         let has_title = patch.title.is_some();
         let has_due_date = patch.due_date.is_some();
+        let has_description = patch.description.is_some();
+        let has_priority = patch.priority.is_some();
+        let has_status = patch.status.is_some();
+        let has_project = patch.project_id.is_some();
         let due_date = patch.due_date.flatten();
+        let description = patch.description.flatten();
+        let priority = patch.priority.map(TaskPriority::as_str);
+        let status = patch.status.map(TaskStatus::as_str);
+        let completed = patch.status == Some(TaskStatus::Completed);
+        let project_id = patch.project_id.flatten();
         let changed = sqlx::query(
             "UPDATE tasks SET
                 title = CASE WHEN ? THEN ? ELSE title END,
                 due_date = CASE WHEN ? THEN ? ELSE due_date END,
+                description = CASE WHEN ? THEN ? ELSE description END,
+                priority = CASE WHEN ? THEN ? ELSE priority END,
+                status = CASE WHEN ? THEN ? ELSE status END,
+                completed = CASE WHEN ? THEN ? ELSE completed END,
+                project_id = CASE WHEN ? THEN ? ELSE project_id END,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE id = ?",
         )
@@ -166,6 +263,16 @@ impl TaskRepository for SqliteTaskRepository {
         .bind(patch.title)
         .bind(has_due_date)
         .bind(due_date)
+        .bind(has_description)
+        .bind(description)
+        .bind(has_priority)
+        .bind(priority)
+        .bind(has_status)
+        .bind(status)
+        .bind(has_status)
+        .bind(completed)
+        .bind(has_project)
+        .bind(project_id)
         .bind(id)
         .execute(&self.pool)
         .await
@@ -180,9 +287,15 @@ impl TaskRepository for SqliteTaskRepository {
 
     async fn set_completed(&self, id: i64, completed: bool) -> Result<Option<Task>, StorageError> {
         let changed = sqlx::query(
-            "UPDATE tasks SET completed = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+            "UPDATE tasks SET completed = ?, status = ?,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
         )
         .bind(completed)
+        .bind(if completed {
+            TaskStatus::Completed.as_str()
+        } else {
+            TaskStatus::Todo.as_str()
+        })
         .bind(id)
         .execute(&self.pool)
         .await
@@ -495,5 +608,251 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(preserved, "keep");
+    }
+
+    #[tokio::test]
+    async fn task_engine_queries_are_bound_sorted_and_consistent() {
+        use pos_tasks::{TaskPriority, TaskQuery, TaskSort, TaskStatus};
+
+        let dir = tempdir().unwrap();
+        let store = SqliteTaskRepository::open(&dir.path().join("filter.sqlite3"))
+            .await
+            .unwrap();
+
+        let normal = store
+            .create(
+                NewTask::with_details(
+                    "Normal report",
+                    Some("2026-11-28"),
+                    None,
+                    TaskPriority::Normal,
+                    TaskStatus::Todo,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let urgent = store
+            .create(
+                NewTask::with_details(
+                    "Urgent fix",
+                    Some("2026-12-01"),
+                    Some("needle 100% important"),
+                    TaskPriority::Urgent,
+                    TaskStatus::InProgress,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let high = store
+            .create(
+                NewTask::with_details(
+                    "High _ task",
+                    None,
+                    None,
+                    TaskPriority::High,
+                    TaskStatus::Blocked,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let completed = store
+            .create(
+                NewTask::with_details(
+                    "Done task",
+                    None,
+                    None,
+                    TaskPriority::Low,
+                    TaskStatus::Completed,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(completed.completed);
+
+        let query =
+            TaskQuery::new(false, None, None, None, None, None, TaskSort::Priority).unwrap();
+        let ids: Vec<_> = store
+            .query_tasks(query)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(ids, vec![urgent.id, high.id, normal.id]);
+
+        let query = TaskQuery::new(true, None, None, None, None, None, TaskSort::Priority).unwrap();
+        let ids: Vec<_> = store
+            .query_tasks(query)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(ids, vec![urgent.id, high.id, normal.id, completed.id]);
+
+        let query =
+            TaskQuery::new(true, None, Some("100%"), None, None, None, TaskSort::Due).unwrap();
+        assert_eq!(store.query_tasks(query).await.unwrap()[0].id, urgent.id);
+        let query = TaskQuery::new(true, None, Some("_"), None, None, None, TaskSort::Due).unwrap();
+        assert_eq!(store.query_tasks(query).await.unwrap()[0].id, high.id);
+        let query = TaskQuery::new(
+            true,
+            None,
+            Some("' OR 1=1 --"),
+            None,
+            None,
+            None,
+            TaskSort::Due,
+        )
+        .unwrap();
+        assert!(store.query_tasks(query).await.unwrap().is_empty());
+
+        let query = TaskQuery::new(
+            false,
+            None,
+            None,
+            None,
+            None,
+            Some("2026-11-28"),
+            TaskSort::Due,
+        )
+        .unwrap();
+        assert_eq!(store.query_tasks(query).await.unwrap()[0].id, normal.id);
+        let query = TaskQuery::new(
+            true,
+            None,
+            None,
+            None,
+            Some(TaskStatus::Completed),
+            None,
+            TaskSort::Due,
+        )
+        .unwrap();
+        assert_eq!(store.query_tasks(query).await.unwrap()[0].id, completed.id);
+        let query = TaskQuery::new(
+            false,
+            None,
+            None,
+            Some(TaskPriority::Urgent),
+            None,
+            None,
+            TaskSort::Due,
+        )
+        .unwrap();
+        assert_eq!(store.query_tasks(query).await.unwrap()[0].id, urgent.id);
+
+        let edited = store
+            .update(
+                urgent.id,
+                TaskPatch::full(
+                    None,
+                    None,
+                    Some(None),
+                    Some(TaskPriority::Low),
+                    Some(TaskStatus::Blocked),
+                    None,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(edited.description, None);
+        assert_eq!(edited.status, TaskStatus::Blocked);
+        assert_eq!(edited.priority, TaskPriority::Low);
+        assert!(!edited.completed);
+        let done = store.set_completed(urgent.id, true).await.unwrap().unwrap();
+        assert_eq!(done.status, TaskStatus::Completed);
+        let reopened = store
+            .set_completed(urgent.id, false)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(reopened.status, TaskStatus::Todo);
+
+        // The migration enforces consistency even when SQL is written directly.
+        assert!(
+            sqlx::query("UPDATE tasks SET completed = 1 WHERE id = ?")
+                .bind(normal.id)
+                .execute(&store.pool)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            store.get(normal.id).await.unwrap().unwrap().status,
+            TaskStatus::Todo
+        );
+    }
+
+    #[tokio::test]
+    async fn phase4_database_migrates_without_losing_completed_tasks() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("phase4.sqlite3");
+        let migrations = tempdir().unwrap();
+        std::fs::write(
+            migrations.path().join("20261112000000_create_tasks.sql"),
+            include_str!("../migrations/20261112000000_create_tasks.sql"),
+        )
+        .unwrap();
+        std::fs::write(
+            migrations
+                .path()
+                .join("20261112010000_create_projects_and_task_links.sql"),
+            include_str!("../migrations/20261112010000_create_projects_and_task_links.sql"),
+        )
+        .unwrap();
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        sqlx::migrate::Migrator::new(migrations.path())
+            .await
+            .unwrap()
+            .run(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("INSERT INTO projects(name,slug) VALUES ('Legacy project','legacy')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO tasks(title,due_date,project_id,completed) VALUES ('Legacy completed','2026-12-01',1,1)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO tasks(title,completed) VALUES ('Legacy todo',0)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        drop(pool);
+
+        let store = SqliteTaskRepository::open(&path).await.unwrap();
+        let old = store.get(1).await.unwrap().unwrap();
+        assert_eq!(old.title, "Legacy completed");
+        assert_eq!(old.project_id, Some(1));
+        assert_eq!(old.due_date.as_deref(), Some("2026-12-01"));
+        assert_eq!(old.priority, TaskPriority::Normal);
+        assert_eq!(old.status, TaskStatus::Completed);
+        assert!(old.completed);
+        assert_eq!(old.description, None);
+        let todo = store.get(2).await.unwrap().unwrap();
+        assert_eq!(todo.status, TaskStatus::Todo);
+        assert!(!todo.completed);
+        assert_eq!(store.get_project(1).await.unwrap().unwrap().slug, "legacy");
+
+        // Migrations are repeatable and don't modify already-migrated data.
+        drop(store);
+        let store = SqliteTaskRepository::open(&path).await.unwrap();
+        assert_eq!(
+            store.get(1).await.unwrap().unwrap().status,
+            TaskStatus::Completed
+        );
     }
 }

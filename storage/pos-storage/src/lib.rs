@@ -1,7 +1,7 @@
 //! Backend-neutral task persistence interface.
 
 use pos_projects::{NewProject, Project};
-use pos_tasks::{NewTask, Task, TaskPatch};
+use pos_tasks::{NewTask, Task, TaskPatch, TaskQuery};
 use std::{error::Error, fmt};
 
 #[derive(Debug)]
@@ -20,6 +20,7 @@ impl Error for StorageError {}
 pub trait TaskRepository: Send + Sync {
     async fn create(&self, task: NewTask) -> Result<Task, StorageError>;
     async fn list(&self, include_completed: bool) -> Result<Vec<Task>, StorageError>;
+    async fn query_tasks(&self, query: TaskQuery) -> Result<Vec<Task>, StorageError>;
     async fn list_for_project(
         &self,
         include_completed: bool,
