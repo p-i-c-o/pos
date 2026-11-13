@@ -122,7 +122,19 @@ Projects use a **stable unique slug** (for example, `university-work`) which doe
 
 **Data location:** `$XDG_DATA_HOME/pos/pos.sqlite3`, or `~/.local/share/pos/pos.sqlite3` if XDG_DATA_HOME is unset. Override it with `--db /path/to/pos.sqlite3` or `POS_DB_PATH=/path/to/pos.sqlite3`. SQLx runs additive, versioned migrations, including on existing Phase 3 task databases. The new task-project relationship is nullable, so existing tasks remain unassigned. When a project is deleted, its tasks are **not deleted**. Project and task deletion require `--yes` at the CLI and interactive confirmation in Ratatui. Back up your SQLite database before intentionally deleting real data.
 
-**Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open that project's filtered tasks. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
+**Ratatui:** The development TUI has a redesigned overview with local task
+and project summaries, upcoming deadlines, a username/date/time header, and a
+Settings submenu containing future integrations. Overview and Settings stay
+fixed in the sidebar; other modules sort by visits over the previous seven
+days on each launch. The TUI stores only module-visit timestamps in
+`$XDG_STATE_HOME/pos/navigation.tsv` (fallback:
+`~/.local/state/pos/navigation.tsv`), separate from SQLite; failure to read or
+write this file does not prevent POS from starting. The `>` marker identifies
+exactly one keyboard focus location, not the currently displayed section.
+Keyboard hints are contextual and separated for readability. See
+[TUI redesign notes](docs/tui-redesign.md).
+
+**Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open the selected project's own overview. Within a project, `j/k` selects Overview, Tasks, Notes, Files, Calendar or Activity; `Enter` on Tasks opens its filtered list, and `Esc` or Back returns to the project list. Other sections are planned, not yet functional. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
 
 Projects currently provide **one-to-many task grouping only**. Project membership, permissions, recurrence, subprojects, calendar integration and server sync are not implemented.
 
@@ -143,7 +155,7 @@ Local tasks now support **priorities** (low, normal, high, urgent), **statuses**
 
 Search matches a case-insensitive substring of the title or description (ASCII case-folding for SQLite's built-in lower function); percent and underscore are treated literally. Due-before is inclusive. Priority sort places urgent first; created sort places the newest task first. The default list hides completed tasks except when explicitly filtering for completed. Done/reopen still work and keep both completion representations consistent.
 
-All changes are validated and applied through the shared task engine and SQLx repository; multi-field edits are **atomic**, including project reassignment. The SQLite migration adds columns and indexes to existing databases without dropping tasks. JSON export is now format_version 2 and includes the new fields. **The Ratatui layout has not changed**; the new metadata is currently managed through the CLI.
+All changes are validated and applied through the shared task engine and SQLx repository; multi-field edits are **atomic**, including project reassignment. The SQLite migration adds columns and indexes to existing databases without dropping tasks. JSON export is now format_version 2 and includes the new fields. The redesigned Ratatui layout changes navigation and overview presentation, but priority/status/description editing remains available through the CLI.
 
 ### Local data safety
 

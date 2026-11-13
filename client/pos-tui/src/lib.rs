@@ -1,28 +1,48 @@
 //! Ratatui presentation and keyboard handling. A worker in pos-cli owns I/O.
+//! Navigation usage is a separate UI-only state file, never the Tasks database.
+
+mod navigation;
+mod render;
+
+use render::render;
 
 use std::{
     io,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
     time::Duration,
 };
 
+use chrono::Local;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use pos_projects::Project;
 use pos_tasks::Task;
-use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::{Line, Text},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
-};
 
+// Stable IDs, independent from the displayed usage-based menu order.
 const SECTIONS: &[&str] = &[
-    "Overview", "Tasks", "Projects", "Calendar", "Mail", "Notes", "Files", "Contacts", "Time",
-    "Chat", "Search", "Git", "GitHub", "GitLab",
+    "Overview", "Projects", "Tasks", "Calendar", "Mail", "Notes", "Files", "Contacts", "Time",
+    "Chat", "Settings",
 ];
-const TASK_SECTION: usize = 1;
-const PROJECT_SECTION: usize = 2;
+const DEFAULT_ORDER: &[usize] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const SETTINGS_ITEMS: &[&str] = &[
+    "Back",
+    "",
+    "Git",
+    "GitHub",
+    "GitLab",
+    "User Account",
+    "General",
+    "About",
+];
+const OVERVIEW_SECTION: usize = 0;
+const PROJECT_SECTION: usize = 1;
+const TASK_SECTION: usize = 2;
+const SETTINGS_SECTION: usize = 10;
+const PROJECT_PAGES: &[&str] = &[
+    "Back", "", "Overview", "Tasks", "Notes", "Files", "Calendar", "Activity",
+];
+const PROJECT_OVERVIEW_PAGE: usize = 2;
+const PROJECT_TASKS_PAGE: usize = 3;
 
 #[derive(Debug)]
 pub enum UiRequest {
@@ -54,6 +74,7 @@ enum Focus {
     Navigation,
     Tasks,
     Projects,
+    ProjectDetail,
 }
 
 #[derive(Debug)]
@@ -72,8 +93,14 @@ enum Editor {
 #[derive(Debug, Default)]
 struct App {
     selected: usize,
+    navigation_order: Vec<usize>,
+    usage_events: Option<Sender<usize>>,
+    settings_open: bool,
+    settings_selected: usize,
     task_selected: usize,
     project_selected: usize,
+    active_project: Option<i64>,
+    project_page_selected: usize,
     tasks: Vec<Task>,
     projects: Vec<Project>,
     filter: Option<String>,
@@ -102,6 +129,11 @@ impl App {
             self.project_selected = self
                 .project_selected
                 .min(self.projects.len().saturating_sub(1));
+            // If a project was deleted by any client, don't keep showing a
+            // stale workspace or accidentally switch to another project.
+            if self.active_project.is_some() && self.open_project().is_none() {
+                self.close_project();
+            }
         }
         if !result.is_error {
             self.filter = result.filter;
@@ -118,6 +150,49 @@ impl App {
         self.projects.get(self.project_selected)
     }
 
+    fn open_project(&self) -> Option<&Project> {
+        let id = self.active_project?;
+        self.projects.iter().find(|project| project.id == id)
+    }
+
+    fn close_project(&mut self) {
+        self.active_project = None;
+        self.project_page_selected = PROJECT_OVERVIEW_PAGE;
+        if self.focus == Focus::ProjectDetail {
+            self.focus = Focus::Projects;
+        }
+    }
+
+    fn open_selected_project(&mut self) {
+        if let Some(project) = self.selected_project() {
+            self.active_project = Some(project.id);
+            self.project_page_selected = PROJECT_OVERVIEW_PAGE;
+            self.focus = Focus::ProjectDetail;
+        }
+    }
+
+    fn activate_project_page(&mut self) -> KeyOutcome {
+        match self.project_page_selected {
+            0 => {
+                self.close_project();
+                KeyOutcome::Nothing
+            }
+            PROJECT_TASKS_PAGE => {
+                let Some(slug) = self.open_project().map(|p| p.slug.clone()) else {
+                    self.close_project();
+                    return KeyOutcome::Nothing;
+                };
+                self.close_project();
+                self.selected = TASK_SECTION;
+                self.focus = Focus::Tasks;
+                self.task_selected = 0;
+                self.record_visit(TASK_SECTION);
+                KeyOutcome::Request(UiRequest::Filter(Some(slug)))
+            }
+            _ => KeyOutcome::Nothing,
+        }
+    }
+
     fn begin_input(&mut self, editor: Editor, value: String) {
         self.input = value;
         self.editor = Some(editor);
@@ -126,9 +201,75 @@ impl App {
     fn current_focus(&self) -> Focus {
         match self.selected {
             TASK_SECTION => Focus::Tasks,
+            PROJECT_SECTION if self.active_project.is_some() => Focus::ProjectDetail,
             PROJECT_SECTION => Focus::Projects,
             _ => Focus::Navigation,
         }
+    }
+
+    fn order(&self) -> &[usize] {
+        if self.navigation_order.is_empty() {
+            DEFAULT_ORDER
+        } else {
+            &self.navigation_order
+        }
+    }
+
+    fn record_visit(&self, section: usize) {
+        if let Some(tx) = &self.usage_events {
+            let _ = tx.send(section);
+        }
+    }
+
+    fn move_navigation(&mut self, forward: bool) {
+        if self.settings_open {
+            let mut index = self.settings_selected;
+            loop {
+                index = if forward {
+                    (index + 1) % SETTINGS_ITEMS.len()
+                } else {
+                    (index + SETTINGS_ITEMS.len() - 1) % SETTINGS_ITEMS.len()
+                };
+                if !SETTINGS_ITEMS[index].is_empty() {
+                    break;
+                }
+            }
+            self.settings_selected = index;
+        } else {
+            let order = self.order();
+            let current = order
+                .iter()
+                .position(|id| *id == self.selected)
+                .unwrap_or(0);
+            let next = if forward {
+                (current + 1) % order.len()
+            } else {
+                (current + order.len() - 1) % order.len()
+            };
+            self.selected = order[next];
+            if self.selected != PROJECT_SECTION {
+                self.close_project();
+            }
+        }
+        self.show_help = false;
+    }
+
+    fn select_navigation(&mut self) {
+        if self.settings_open {
+            if self.settings_selected == 0 {
+                self.settings_open = false;
+                self.focus = Focus::Navigation;
+            }
+        } else if self.selected == SETTINGS_SECTION {
+            self.settings_open = true;
+            self.settings_selected = 0;
+            self.focus = Focus::Navigation;
+            self.record_visit(SETTINGS_SECTION);
+        } else {
+            self.focus = self.current_focus();
+            self.record_visit(self.selected);
+        }
+        self.show_help = false;
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> KeyOutcome {
@@ -146,12 +287,19 @@ impl App {
         match key.code {
             KeyCode::Char('q') => KeyOutcome::Quit,
             KeyCode::Esc => {
-                if self.focus != Focus::Navigation {
+                if self.show_help {
+                    self.show_help = false;
+                } else if self.settings_open {
+                    self.settings_open = false;
                     self.focus = Focus::Navigation;
-                    KeyOutcome::Nothing
+                } else if self.focus == Focus::ProjectDetail {
+                    self.close_project();
+                } else if self.focus != Focus::Navigation {
+                    self.focus = Focus::Navigation;
                 } else {
-                    KeyOutcome::Quit
+                    return KeyOutcome::Quit;
                 }
+                KeyOutcome::Nothing
             }
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
@@ -159,11 +307,17 @@ impl App {
             }
             KeyCode::Char('r') => KeyOutcome::Request(UiRequest::Refresh),
             KeyCode::Tab | KeyCode::Right => {
-                self.focus = if self.focus == Focus::Navigation {
-                    self.current_focus()
-                } else {
-                    Focus::Navigation
-                };
+                if !self.settings_open {
+                    if self.focus == Focus::Navigation {
+                        let focus = self.current_focus();
+                        if focus != Focus::Navigation {
+                            self.focus = focus;
+                            self.record_visit(self.selected);
+                        }
+                    } else {
+                        self.focus = Focus::Navigation;
+                    }
+                }
                 self.show_help = false;
                 KeyOutcome::Nothing
             }
@@ -172,32 +326,32 @@ impl App {
                 KeyOutcome::Nothing
             }
             KeyCode::Enter if self.focus == Focus::Navigation => {
-                self.focus = self.current_focus();
-                self.show_help = false;
+                self.select_navigation();
                 KeyOutcome::Nothing
             }
             KeyCode::Enter if self.focus == Focus::Projects => {
-                if let Some(project) = self.selected_project() {
-                    let slug = project.slug.clone();
-                    self.selected = TASK_SECTION;
-                    self.focus = Focus::Tasks;
-                    self.task_selected = 0;
-                    KeyOutcome::Request(UiRequest::Filter(Some(slug)))
-                } else {
-                    KeyOutcome::Nothing
-                }
+                self.open_selected_project();
+                KeyOutcome::Nothing
             }
+            KeyCode::Enter if self.focus == Focus::ProjectDetail => self.activate_project_page(),
             KeyCode::Down | KeyCode::Char('j') => {
                 match self.focus {
-                    Focus::Navigation => {
-                        self.selected = (self.selected + 1) % SECTIONS.len();
-                        self.show_help = false;
-                    }
+                    Focus::Navigation => self.move_navigation(true),
                     Focus::Tasks if !self.tasks.is_empty() => {
                         self.task_selected = (self.task_selected + 1) % self.tasks.len();
                     }
                     Focus::Projects if !self.projects.is_empty() => {
                         self.project_selected = (self.project_selected + 1) % self.projects.len();
+                    }
+                    Focus::ProjectDetail => {
+                        let mut next = self.project_page_selected;
+                        loop {
+                            next = (next + 1) % PROJECT_PAGES.len();
+                            if !PROJECT_PAGES[next].is_empty() {
+                                break;
+                            }
+                        }
+                        self.project_page_selected = next;
                     }
                     _ => {}
                 }
@@ -205,10 +359,7 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 match self.focus {
-                    Focus::Navigation => {
-                        self.selected = (self.selected + SECTIONS.len() - 1) % SECTIONS.len();
-                        self.show_help = false;
-                    }
+                    Focus::Navigation => self.move_navigation(false),
                     Focus::Tasks if !self.tasks.is_empty() => {
                         self.task_selected =
                             (self.task_selected + self.tasks.len() - 1) % self.tasks.len();
@@ -216,6 +367,16 @@ impl App {
                     Focus::Projects if !self.projects.is_empty() => {
                         self.project_selected =
                             (self.project_selected + self.projects.len() - 1) % self.projects.len();
+                    }
+                    Focus::ProjectDetail => {
+                        let mut next = self.project_page_selected;
+                        loop {
+                            next = (next + PROJECT_PAGES.len() - 1) % PROJECT_PAGES.len();
+                            if !PROJECT_PAGES[next].is_empty() {
+                                break;
+                            }
+                        }
+                        self.project_page_selected = next;
                     }
                     _ => {}
                 }
@@ -384,11 +545,30 @@ pub fn run(requests: Sender<UiRequest>, responses: Receiver<UiResponse>) -> io::
         .send(UiRequest::Refresh)
         .map_err(|error| io::Error::new(io::ErrorKind::BrokenPipe, error.to_string()))?;
 
-    ratatui::run(|terminal| {
+    // Load navigation counts once so the menu cannot rearrange while
+    // keyboard navigation is in progress. Persist visits off the UI thread.
+    let history_path = navigation::history_path();
+    let ordered = history_path
+        .as_deref()
+        .map(|path| navigation::load_ranked(path, DEFAULT_ORDER, navigation::now_secs()))
+        .unwrap_or_else(|| DEFAULT_ORDER.to_vec());
+    let (visit_tx, visit_rx) = mpsc::channel::<usize>();
+    let usage_writer = thread::spawn(move || {
+        for section in visit_rx {
+            if let Some(path) = &history_path {
+                let _ = navigation::record(path, section, navigation::now_secs());
+            }
+        }
+    });
+
+    let result = ratatui::run(|terminal| {
         let mut app = App {
+            navigation_order: ordered,
+            usage_events: Some(visit_tx),
             status: "Loading local tasks and projects...".into(),
             ..App::default()
         };
+        let mut clock_minute = Local::now().timestamp() / 60;
         let mut needs_draw = true;
         loop {
             while let Ok(result) = responses.try_recv() {
@@ -419,218 +599,19 @@ pub fn run(requests: Sender<UiRequest>, responses: Receiver<UiResponse>) -> io::
                     _ => {}
                 }
             }
+            // Refresh the visible local date/time when the minute changes.
+            // No filesystem reads or external commands in the input loop.
+            let minute = Local::now().timestamp() / 60;
+            if minute != clock_minute {
+                clock_minute = minute;
+                needs_draw = true;
+            }
         }
-    })
-}
-
-fn render(frame: &mut Frame<'_>, app: &App) {
-    let screen = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(5),
-            Constraint::Length(3),
-            Constraint::Length(3),
-        ])
-        .split(frame.area());
-
-    let header = Paragraph::new(
-        Line::from(format!(
-            " Personal Organisation System   |   v{}   |   local-first ",
-            env!("CARGO_PKG_VERSION")
-        ))
-        .style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-    )
-    .block(Block::default().borders(Borders::ALL).title(" POS "));
-    frame.render_widget(header, screen[0]);
-
-    let columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(22), Constraint::Min(16)])
-        .split(screen[1]);
-
-    let items = SECTIONS.iter().map(|section| ListItem::new(*section));
-    let navigation = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Navigation "))
-        .highlight_style(
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol(if app.focus == Focus::Navigation {
-            "> "
-        } else {
-            "  "
-        });
-    let mut state = ListState::default().with_selected(Some(app.selected));
-    frame.render_stateful_widget(navigation, columns[0], &mut state);
-
-    if app.show_help {
-        let help = Text::from(vec![
-            Line::from("Keyboard shortcuts"),
-            Line::from(""),
-            Line::from(" j / k         Move in current list"),
-            Line::from(" Enter / Tab   Focus Tasks or Projects"),
-            Line::from(" Esc           Back to sidebar / quit"),
-            Line::from(" ?             Toggle help"),
-            Line::from(" r             Refresh local data"),
-            Line::from(""),
-            Line::from(" Tasks: a add, e edit, d due, p assign project"),
-            Line::from(" Tasks: u unassign, f filter, Space toggle, x delete"),
-            Line::from(""),
-            Line::from(" Projects: a add, e rename, Space archive"),
-            Line::from(" Projects: x delete, Enter filter Tasks"),
-            Line::from(""),
-            Line::from(" Clear task filter with f + blank Enter"),
-            Line::from(" q / Ctrl+C    Quit POS"),
-        ]);
-        frame.render_widget(
-            Paragraph::new(help)
-                .block(Block::default().borders(Borders::ALL).title(" Help "))
-                .wrap(Wrap { trim: true }),
-            columns[1],
-        );
-    } else if app.selected == TASK_SECTION {
-        let items = app.tasks.iter().map(|task| {
-            let mark = if task.completed { "x" } else { " " };
-            let due = task
-                .due_date
-                .as_deref()
-                .map(|date| format!(" due {date}"))
-                .unwrap_or_default();
-            let project = task.project_id.and_then(|id| {
-                app.projects
-                    .iter()
-                    .find(|project| project.id == id)
-                    .map(|p| p.slug.as_str())
-            });
-            let project = project.map(|p| format!(" [{p}]")).unwrap_or_default();
-            ListItem::new(format!(
-                "[{mark}] #{} {}{due}{project}",
-                task.id, task.title
-            ))
-        });
-        let title = app
-            .filter
-            .as_deref()
-            .map(|slug| format!(" Tasks / {slug} "))
-            .unwrap_or_else(|| " Local Tasks / All ".into());
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("> ");
-        let mut state = ListState::default().with_selected(if app.tasks.is_empty() {
-            None
-        } else {
-            Some(app.task_selected)
-        });
-        frame.render_stateful_widget(list, columns[1], &mut state);
-    } else if app.selected == PROJECT_SECTION {
-        let items = app.projects.iter().map(|project| {
-            let mark = if project.archived {
-                "archived"
-            } else {
-                "active"
-            };
-            ListItem::new(format!("{} [{}] ({mark})", project.name, project.slug))
-        });
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Local Projects "),
-            )
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("> ");
-        let mut state = ListState::default().with_selected(if app.projects.is_empty() {
-            None
-        } else {
-            Some(app.project_selected)
-        });
-        frame.render_stateful_widget(list, columns[1], &mut state);
-    } else {
-        let body = if app.selected == 0 {
-            Text::from(vec![
-                Line::from("Welcome to POS."),
-                Line::from(""),
-                Line::from("Tasks and Projects persist locally in SQLite."),
-                Line::from(""),
-                Line::from(format!("{} tasks in current view", app.tasks.len())),
-                Line::from(format!("{} projects", app.projects.len())),
-                Line::from(""),
-                Line::from("Navigate to Tasks or Projects and press Enter."),
-                Line::from("All other modules remain placeholders."),
-            ])
-        } else {
-            Text::from(vec![
-                Line::from(SECTIONS[app.selected]),
-                Line::from(""),
-                Line::from("This module is planned, but has not been implemented."),
-            ])
-        };
-        frame.render_widget(
-            Paragraph::new(body)
-                .block(Block::default().borders(Borders::ALL).title(" Workspace "))
-                .wrap(Wrap { trim: true }),
-            columns[1],
-        );
-    }
-
-    let status = match &app.editor {
-        Some(Editor::AddTask) => format!(" New task title: {}_", app.input),
-        Some(Editor::EditTask(id)) => format!(" Edit task #{id}: {}_", app.input),
-        Some(Editor::TaskDue(id)) => format!(" Due for #{id} (YYYY-MM-DD): {}_", app.input),
-        Some(Editor::TaskProject(id)) => format!(" Project slug for task #{id}: {}_", app.input),
-        Some(Editor::TaskFilter) => format!(" Filter by project slug (blank=all): {}_", app.input),
-        Some(Editor::DeleteTask(id)) => format!(" Delete task #{id} permanently? y/n"),
-        Some(Editor::AddProject) => format!(" New project name: {}_", app.input),
-        Some(Editor::RenameProject(id)) => format!(" Rename project #{id}: {}_", app.input),
-        Some(Editor::DeleteProject(id)) => {
-            format!(" Delete project #{id}? Its tasks remain unassigned. y/n")
-        }
-        None => format!(" {}", app.status),
-    };
-    frame.render_widget(
-        Paragraph::new(status)
-            .style(if app.is_error {
-                Style::default().fg(Color::Red)
-            } else {
-                Style::default().fg(Color::Green)
-            })
-            .block(Block::default().borders(Borders::ALL).title(" Status ")),
-        screen[2],
-    );
-
-    let footer = if app.editor.is_some() {
-        " Enter: save/confirm   Esc: cancel   Backspace: erase "
-    } else if app.focus == Focus::Tasks {
-        " a add e edit d due p project u clear f filter Space done x delete Esc back "
-    } else if app.focus == Focus::Projects {
-        " a add e rename Space archive x delete Enter open Tasks Esc back "
-    } else {
-        " j/k navigate Enter/Tab focus Tasks/Projects ?: help q/Esc quit "
-    };
-    frame.render_widget(
-        Paragraph::new(footer)
-            .block(Block::default().borders(Borders::ALL).title(" Keys "))
-            .style(Style::default().fg(Color::Yellow)),
-        screen[3],
-    );
+    });
+    usage_writer
+        .join()
+        .map_err(|_| io::Error::other("navigation history writer panicked"))?;
+    result
 }
 
 #[cfg(test)]
@@ -745,20 +726,123 @@ mod tests {
     }
 
     #[test]
-    fn projects_open_filtered_tasks_without_losing_context() {
+    fn projects_open_own_hub_and_tasks_are_an_explicit_section() {
+        let mut app = App {
+            selected: PROJECT_SECTION,
+            projects: vec![project()],
+            tasks: vec![task()],
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Enter)); // focus Projects list
+        assert_eq!(app.focus, Focus::Projects);
+        assert!(matches!(
+            app.handle_key(key(KeyCode::Enter)),
+            KeyOutcome::Nothing
+        ));
+        assert_eq!(
+            app.selected, PROJECT_SECTION,
+            "opening a project is not opening Tasks"
+        );
+        assert_eq!(app.focus, Focus::ProjectDetail);
+        assert_eq!(app.active_project, Some(5));
+        let (hub, markers) = snapshot(&app);
+        assert!(hub.contains("Project - University"));
+        assert!(hub.contains("Project Overview"));
+        assert!(hub.contains("Notes"));
+        assert!(hub.contains("Files"));
+        assert!(hub.contains("Calendar"));
+        assert!(hub.contains("Activity"));
+        assert_eq!(markers.len(), 1);
+        assert!(markers[0].0 >= 22, "focus stays in project hub");
+
+        app.handle_key(key(KeyCode::Down)); // select Tasks explicitly
+        assert_eq!(app.project_page_selected, PROJECT_TASKS_PAGE);
+        assert!(matches!(
+            app.handle_key(key(KeyCode::Enter)),
+            KeyOutcome::Request(UiRequest::Filter(Some(ref slug))) if slug == "university"
+        ));
+        assert_eq!(app.selected, TASK_SECTION);
+        assert_eq!(app.focus, Focus::Tasks);
+        assert_eq!(app.active_project, None);
+    }
+
+    #[test]
+    fn project_pages_are_separate_and_back_restores_project_list() {
         let mut app = App {
             selected: PROJECT_SECTION,
             projects: vec![project()],
             ..App::default()
         };
-        app.handle_key(key(KeyCode::Enter)); // focus projects
-        assert_eq!(app.focus, Focus::Projects);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        for _ in 0..2 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        assert_eq!(app.project_page_selected, 4, "Notes is distinct from Tasks");
+        let (notes, markers) = snapshot(&app);
+        assert!(notes.contains("Project notes are planned"));
+        assert_eq!(markers.len(), 1);
         assert!(matches!(
             app.handle_key(key(KeyCode::Enter)),
-            KeyOutcome::Request(UiRequest::Filter(Some(ref slug))) if slug=="university"
+            KeyOutcome::Nothing
         ));
-        assert_eq!(app.selected, TASK_SECTION);
-        assert_eq!(app.focus, Focus::Tasks);
+        assert_eq!(app.selected, PROJECT_SECTION);
+        assert_eq!(app.focus, Focus::ProjectDetail);
+
+        app.handle_key(key(KeyCode::Up)); // Tasks
+        app.handle_key(key(KeyCode::Up)); // Overview
+        app.handle_key(key(KeyCode::Up)); // Back, skipping separator
+        assert_eq!(app.project_page_selected, 0);
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.active_project, None);
+        assert_eq!(app.focus, Focus::Projects);
+        let (projects, markers) = snapshot(&app);
+        assert!(projects.contains("Workspace - Projects"));
+        assert!(!projects.contains("Project - University"));
+        assert_eq!(markers.len(), 1);
+
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.focus, Focus::ProjectDetail);
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.focus, Focus::Projects);
+        assert_eq!(app.active_project, None);
+    }
+
+    #[test]
+    fn project_view_fails_closed_when_project_disappears() {
+        let mut app = App {
+            selected: PROJECT_SECTION,
+            projects: vec![project()],
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.active_project, Some(5));
+        app.accept_response(UiResponse {
+            tasks: None,
+            projects: Some(vec![]),
+            filter: None,
+            status: "Projects refreshed".into(),
+            is_error: false,
+        });
+        assert_eq!(app.active_project, None);
+        assert_eq!(app.focus, Focus::Projects);
+    }
+
+    #[test]
+    fn project_hub_does_not_claim_task_counts_from_another_filter() {
+        let mut app = App {
+            selected: PROJECT_SECTION,
+            projects: vec![project()],
+            tasks: vec![task()],
+            filter: Some("another-project".into()),
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        let (hub, _) = snapshot(&app);
+        assert!(hub.contains("Task counts unavailable"));
+        assert!(!hub.contains("1 linked tasks"));
     }
 
     #[test]
@@ -870,5 +954,172 @@ mod tests {
         assert_eq!(app.task_selected, 0);
         assert_eq!(app.project_selected, 0);
         assert_eq!(app.filter.as_deref(), Some("university"));
+    }
+
+    // Test the exact 100x32 terminal dimensions used by the approved mockup.
+    fn snapshot(app: &App) -> (String, Vec<(usize, usize)>) {
+        let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+        terminal.draw(|frame| render(frame, app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut output = String::new();
+        let mut focus_markers = Vec::new();
+        for (index, cell) in buffer.content.iter().enumerate() {
+            if cell.symbol() == ">" {
+                focus_markers.push((index % 100, index / 100));
+            }
+            output.push_str(cell.symbol());
+            if index % 100 == 99 {
+                output.push('\n');
+            }
+        }
+        (output, focus_markers)
+    }
+
+    #[test]
+    fn focus_marker_is_unique_and_moves_with_keyboard_focus() {
+        let mut app = App {
+            selected: TASK_SECTION,
+            tasks: vec![task()],
+            ..App::default()
+        };
+        let (navigation, markers) = snapshot(&app);
+        assert!(navigation.contains("Workspace - Tasks / All"));
+        assert_eq!(markers.len(), 1, "only sidebar may show focus marker");
+        assert_eq!(
+            markers[0].0, 2,
+            "navigation marker needs one space after border"
+        );
+        assert_eq!(
+            markers[0].1, 7,
+            "navigation items start one blank row below border"
+        );
+
+        app.handle_key(key(KeyCode::Enter));
+        let (_, markers) = snapshot(&app);
+        assert_eq!(markers.len(), 1, "must not show a second sidebar marker");
+        assert!(markers[0].0 >= 22, "focus moved to task row");
+
+        app.handle_key(key(KeyCode::Char('?')));
+        let (_, markers) = snapshot(&app);
+        assert_eq!(markers.len(), 1, "help overlay must not duplicate focus");
+        assert!(markers[0].0 >= 22);
+
+        app.handle_key(key(KeyCode::Esc));
+        app.handle_key(key(KeyCode::Esc));
+        let (_, markers) = snapshot(&app);
+        assert_eq!(markers.len(), 1);
+        assert!(markers[0].0 < 22);
+    }
+
+    #[test]
+    fn empty_focused_lists_still_show_one_focus_marker() {
+        for selected in [TASK_SECTION, PROJECT_SECTION] {
+            let mut app = App {
+                selected,
+                ..App::default()
+            };
+            app.handle_key(key(KeyCode::Enter));
+            let (_, markers) = snapshot(&app);
+            assert_eq!(markers.len(), 1);
+            assert!(markers[0].0 >= 22);
+        }
+    }
+
+    #[test]
+    fn settings_back_menu_and_divider_behave_as_requested() {
+        let mut app = App {
+            selected: SETTINGS_SECTION,
+            ..App::default()
+        };
+        let (main, markers) = snapshot(&app);
+        assert!(main.contains("Settings"));
+        assert_eq!(markers.len(), 1);
+
+        app.handle_key(key(KeyCode::Enter));
+        assert!(app.settings_open);
+        assert_eq!(app.settings_selected, 0);
+        let (settings, markers) = snapshot(&app);
+        assert!(settings.contains("Back"));
+        assert!(settings.contains("Git"));
+        assert!(settings.contains("GitHub"));
+        assert!(settings.contains("User Account"));
+        assert_eq!(markers.len(), 1);
+
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.settings_selected, 2, "blank separator must be skipped");
+        app.handle_key(key(KeyCode::Enter));
+        let (git, _) = snapshot(&app);
+        assert!(git.contains("Settings - Git"));
+        assert!(git.contains("not implemented"));
+
+        app.handle_key(key(KeyCode::Esc));
+        assert!(!app.settings_open);
+        assert_eq!(app.selected, SETTINGS_SECTION);
+
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter)); // Back
+        assert!(!app.settings_open);
+        assert_eq!(app.focus, Focus::Navigation);
+    }
+
+    #[test]
+    fn ranking_only_changes_main_navigation_order_at_startup() {
+        let ordered = navigation::rank(
+            DEFAULT_ORDER,
+            "2000000\t8\n1999999\t8\n1999998\t2\n",
+            2_000_000,
+        );
+        assert_eq!(ordered[0], OVERVIEW_SECTION);
+        assert_eq!(ordered[ordered.len() - 1], SETTINGS_SECTION);
+        assert_eq!(ordered[1], 8);
+
+        let mut app = App {
+            navigation_order: ordered,
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.selected, 8, "ranked module takes second menu slot");
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.selected, TASK_SECTION);
+        // No menu reorder while the app is running.
+        assert_eq!(app.order()[1], 8);
+    }
+
+    #[test]
+    fn overview_shows_real_local_data_and_contextual_titles() {
+        let mut imminent = task();
+        imminent.due_date = Some(
+            (Local::now().date_naive() + chrono::Duration::days(1))
+                .format("%Y-%m-%d")
+                .to_string(),
+        );
+        let mut app = App {
+            tasks: vec![imminent],
+            projects: vec![project()],
+            ..App::default()
+        };
+        let (overview, markers) = snapshot(&app);
+        assert_eq!(markers.len(), 1);
+        assert!(overview.contains("Workspace - Overview"));
+        assert_eq!(
+            overview
+                .lines()
+                .position(|line| line.contains("Welcome to POS.")),
+            Some(5),
+            "workspace content must begin one blank row below its top border"
+        );
+        assert!(overview.contains("Tasks: 1 open"));
+        assert!(overview.contains("Upcoming deadlines"));
+        assert!(overview.contains("Finish report"));
+        assert!(overview.contains("University"));
+        assert!(overview.contains("│")); // real terminal panel borders
+
+        app.selected = TASK_SECTION;
+        app.filter = Some("university".into());
+        let (tasks, markers) = snapshot(&app);
+        assert!(tasks.contains("Workspace - Tasks / University"));
+        assert_eq!(markers.len(), 1);
+        let footer = tasks.lines().find(|l| l.contains("j/k Navigate")).unwrap();
+        assert!(footer.contains("│"), "keyboard shortcuts need separators");
     }
 }
