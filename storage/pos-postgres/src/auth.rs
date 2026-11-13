@@ -124,8 +124,7 @@ impl PostgresStore {
             Err(_) => return Err(IdentityError::StorageUnavailable),
         };
         let workspace = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO pos_workspaces (owner_user_id, kind, name) \\
-             VALUES ($1, 'personal', 'Personal') RETURNING id",
+            "INSERT INTO pos_workspaces (owner_user_id, kind, name) VALUES ($1, 'personal', 'Personal') RETURNING id",
         )
         .bind(user)
         .fetch_one(&mut *tx)
