@@ -278,7 +278,7 @@ fn draw_workspace(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect)
     let block = Block::default()
         .borders(Borders::ALL)
         .title(format!(" {} ", workspace_title(app)))
-        .padding(Padding::horizontal(2));
+        .padding(Padding::new(2, 2, 1, 0));
 
     if app.show_help {
         let leading = if app.focus == Focus::Navigation {

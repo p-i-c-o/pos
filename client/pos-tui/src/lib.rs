@@ -916,6 +916,13 @@ mod tests {
         let (overview, markers) = snapshot(&app);
         assert_eq!(markers.len(), 1);
         assert!(overview.contains("Workspace - Overview"));
+        assert_eq!(
+            overview
+                .lines()
+                .position(|line| line.contains("Welcome to POS.")),
+            Some(5),
+            "workspace content must begin one blank row below its top border"
+        );
         assert!(overview.contains("Tasks: 1 open"));
         assert!(overview.contains("Upcoming deadlines"));
         assert!(overview.contains("Finish report"));
