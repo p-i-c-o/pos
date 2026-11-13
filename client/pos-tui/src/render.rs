@@ -113,9 +113,9 @@ fn draw_navigation(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect
         )
         .highlight_style(highlighted)
         .highlight_symbol(if app.focus == Focus::Navigation {
-            "> "
+            " > "
         } else {
-            "  "
+            "   "
         });
     let mut state = ListState::default().with_selected(Some(selected));
     frame.render_stateful_widget(list, area, &mut state);

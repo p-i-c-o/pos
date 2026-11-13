@@ -807,7 +807,10 @@ mod tests {
         let (navigation, markers) = snapshot(&app);
         assert!(navigation.contains("Workspace - Tasks / All"));
         assert_eq!(markers.len(), 1, "only sidebar may show focus marker");
-        assert!(markers[0].0 < 22, "focus initially belongs to sidebar");
+        assert_eq!(
+            markers[0].0, 2,
+            "navigation marker needs one space after border"
+        );
         assert_eq!(
             markers[0].1, 7,
             "navigation items start one blank row below border"
