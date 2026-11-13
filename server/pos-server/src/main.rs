@@ -1,7 +1,10 @@
-//! Local-only POS server entry point. Data APIs require future auth.
+//! Local POS server and trusted operator-only account administration.
 
 use std::error::Error;
 
+mod admin;
+
+use admin::{Cli, Command};
 use clap::Parser;
 use pos_postgres::PostgresStore;
 use pos_server::{ServerConfig, bind, serve_with_store};
@@ -9,7 +12,13 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let config = ServerConfig::parse();
+    let args = Cli::parse();
+    let config = ServerConfig {
+        listen: args.listen,
+    };
+    if let Some(Command::Admin { action }) = args.action {
+        return admin::run_admin(action).await;
+    }
     // Reject unsafe addresses BEFORE opening/migrating a configured database.
     config.validate()?;
     let filter =

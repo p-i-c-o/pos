@@ -24,3 +24,10 @@ integration tests against a disposable localhost database, including password
 login, device ownership, expiry and revocation. Future data repositories must
 test transactions, concurrent writes and tenant isolation.
 The crate is used by optional authenticated HTTP identity/workspace endpoints and server Tasks/Projects create/read/update. There is no hard delete or sync.
+
+## Trusted onboarding
+
+`provision_user_with_personal_workspace` atomically creates a new account
+and owner-only Personal workspace. The old `provision_user` remains intact.
+Server login/logout reuse existing password hashing and device-bound
+session/revocation methods. Keep identity SQL here, not in HTTP handlers.

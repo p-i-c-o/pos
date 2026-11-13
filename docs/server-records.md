@@ -17,9 +17,9 @@ reversible. Back up an existing POS database before enabling this feature.
 Never point it at an unrelated or production database during experiments.
 No PostgreSQL service or user data is created on the homelab by this change.
 
-There is still no HTTP login, registration or token provisioning route.
-Integration tests use internal trusted provisioning only. Do not expose
-the server through a proxy, tunnel or the public internet.
+At the original Phase 9d there was no login route. PR #17 now adds
+restricted loopback HTTP login/logout and trusted CLI account provisioning;
+see [onboarding](account-onboarding.md). Do not expose the server publicly.
 
 ## Versioned HTTP API
 

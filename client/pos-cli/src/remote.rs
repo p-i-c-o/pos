@@ -19,6 +19,26 @@ const DEFAULT_SERVER: &str = "http://127.0.0.1:8787";
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum RemoteAction {
+    /// Authenticate with a POS server and enroll/reuse this device.
+    Login {
+        /// Account email provisioned by a trusted server administrator.
+        #[arg(long)]
+        email: String,
+        /// Human-readable name for this device.
+        #[arg(long, default_value = "POS client")]
+        device_label: String,
+        /// Read the password from standard input (for controlled tests).
+        #[arg(long)]
+        password_stdin: bool,
+        /// Explicitly rotate an existing 0600 session file.
+        #[arg(long)]
+        replace: bool,
+        /// Enroll a fresh device rather than reuse a stored device UUID.
+        #[arg(long)]
+        new_device: bool,
+    },
+    /// Revoke this session and remove its local credential file.
+    Logout,
     /// Confirm which user and device the bearer session represents.
     Me {
         #[arg(long)]
@@ -59,7 +79,7 @@ fn error(message: &'static str) -> Box<dyn Error> {
     Box::new(ClientError(message))
 }
 
-fn server_url(override_url: Option<&str>) -> Result<Url, Box<dyn Error>> {
+pub(crate) fn server_url(override_url: Option<&str>) -> Result<Url, Box<dyn Error>> {
     let configured = override_url
         .map(str::to_owned)
         .or_else(|| env::var("POS_SERVER_URL").ok())
@@ -88,31 +108,49 @@ fn server_url(override_url: Option<&str>) -> Result<Url, Box<dyn Error>> {
     Ok(url)
 }
 
-fn token() -> Result<HeaderValue, Box<dyn Error>> {
+pub(crate) fn token() -> Result<HeaderValue, Box<dyn Error>> {
     let raw = match env::var_os("POS_SERVER_TOKEN_FILE") {
-        Some(path) => {
-            let path = PathBuf::from(path);
-            let metadata = fs::symlink_metadata(&path)
-                .map_err(|_| error("cannot read POS_SERVER_TOKEN_FILE"))?;
-            if !metadata.file_type().is_file() || metadata.len() > 4096 {
-                return Err(error("POS_SERVER_TOKEN_FILE must be a small regular file"));
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if metadata.permissions().mode() & 0o077 != 0 {
+        Some(path) => read_token_file(&PathBuf::from(path))?,
+        None => match env::var("POS_SERVER_TOKEN") {
+            Ok(token) => token,
+            Err(_) => {
+                let path = crate::onboarding::session_path()?;
+                if std::fs::symlink_metadata(&path).is_err() {
                     return Err(error(
-                        "POS_SERVER_TOKEN_FILE permissions must be owner-only (0600)",
+                        "set POS_SERVER_TOKEN_FILE or POS_SERVER_TOKEN, or run 'pos remote login'",
                     ));
                 }
+                read_token_file(&path)?
             }
-            fs::read_to_string(path).map_err(|_| error("cannot read POS_SERVER_TOKEN_FILE"))?
-        }
-        None => env::var("POS_SERVER_TOKEN").map_err(|_| {
-            error("set POS_SERVER_TOKEN_FILE or POS_SERVER_TOKEN for remote access")
-        })?,
+        },
     };
-    let raw = raw.trim_end_matches(['\r', '\n']);
+    header_for_token(raw.trim_end_matches(['\r', '\n']))
+}
+
+pub(crate) fn token_from_file(path: &std::path::Path) -> Result<HeaderValue, Box<dyn Error>> {
+    let raw = read_token_file(path)?;
+    header_for_token(raw.trim_end_matches(['\r', '\n']))
+}
+
+fn read_token_file(path: &std::path::Path) -> Result<String, Box<dyn Error>> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| error("cannot read POS_SERVER_TOKEN_FILE"))?;
+    if !metadata.file_type().is_file() || metadata.len() > 4096 {
+        return Err(error("POS_SERVER_TOKEN_FILE must be a small regular file"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err(error(
+                "POS_SERVER_TOKEN_FILE permissions must be owner-only (0600)",
+            ));
+        }
+    }
+    fs::read_to_string(path).map_err(|_| error("cannot read POS session token file"))
+}
+
+fn header_for_token(raw: &str) -> Result<HeaderValue, Box<dyn Error>> {
     if raw.is_empty()
         || raw.len() > 4096
         || !raw.is_ascii()
@@ -122,8 +160,10 @@ fn token() -> Result<HeaderValue, Box<dyn Error>> {
     {
         return Err(error("POS bearer token is missing or malformed"));
     }
-    HeaderValue::from_str(&format!("Bearer {raw}"))
-        .map_err(|_| error("POS bearer token is invalid"))
+    let mut value = HeaderValue::from_str(&format!("Bearer {raw}"))
+        .map_err(|_| error("POS bearer token is invalid"))?;
+    value.set_sensitive(true);
+    Ok(value)
 }
 
 struct RemoteClient {
@@ -254,8 +294,31 @@ fn output_json<T: serde::Serialize>(value: &T) -> Result<(), Box<dyn Error>> {
 }
 
 pub(crate) async fn execute(url: Option<&str>, action: RemoteAction) -> Result<(), Box<dyn Error>> {
+    match action {
+        RemoteAction::Login {
+            email,
+            device_label,
+            password_stdin,
+            replace,
+            new_device,
+        } => {
+            return crate::onboarding::login(
+                url,
+                &email,
+                &device_label,
+                password_stdin,
+                replace,
+                new_device,
+            )
+            .await;
+        }
+        RemoteAction::Logout => return crate::onboarding::logout(url).await,
+        _ => {}
+    }
+
     let client = RemoteClient::new(url)?;
     match action {
+        RemoteAction::Login { .. } | RemoteAction::Logout => unreachable!(),
         RemoteAction::Me { json } => {
             let identity: Identity = client.get("/api/v1/auth/me").await?;
             if json {

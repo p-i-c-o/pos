@@ -30,3 +30,12 @@ address only, no redirects or proxies; no public or LAN exposure. Preserve
 bounded response handling, timeouts and terminal text sanitization.
 Test via disposable loopback mocks and preserve local data isolation.
 See docs/client-server-readonly.md.
+
+## Device onboarding
+
+`pos remote login` uses a hidden password prompt and the loopback server
+to enroll or reuse devices. Session tokens live in owner-only 0600 files
+in 0700 directories; explicit `--replace` is required for rotation.
+`pos remote logout` revokes remotely before deleting the local token.
+No secrets in arguments, logs or Git. These commands operate independently
+of SQLite. See docs/account-onboarding.md.

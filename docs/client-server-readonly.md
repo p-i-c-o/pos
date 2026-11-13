@@ -11,9 +11,9 @@ maintenance commands are unchanged.
   `POS_SERVER_DATABASE_URL` configured to a dedicated POS PostgreSQL
   database; a server started without PostgreSQL returns 404 for the
   authenticated API.
-- A valid, device-bound bearer session token **already issued by trusted
-  POS provisioning code**. The POS server does not currently have public
-  login, registration, token issuance, or device enrollment endpoints.
+- An existing device-bound bearer token. PR #17 adds development-only
+  private token-file enrollment and login; see [onboarding](account-onboarding.md).
+  Public registration and internet-facing login are still unavailable.
 - For a server on another machine, forward a local TCP port over SSH,
   then use `http://127.0.0.1:PORT` as the client server URL.
   POS does not yet directly connect over TLS or to arbitrary hosts.

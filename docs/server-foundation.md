@@ -1,3 +1,6 @@
+> Historical Phase 8 document. PR #17 subsequently added loopback-only login
+> and trusted local account provisioning. See [onboarding](account-onboarding.md).
+
 # POS HTTP server foundation
 
 Status: **development-only foundation** (merged into `develop`).

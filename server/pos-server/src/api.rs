@@ -2,6 +2,7 @@
 //! No login, registration, workspace administration or Tasks/Projects routes.
 //! Authorization is evaluated afresh for each request against PostgreSQL.
 
+mod onboarding;
 mod records;
 
 use axum::{
@@ -19,6 +20,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 struct ApiState {
     store: PostgresStore,
+    login_limit: std::sync::Arc<onboarding::LoginLimit>,
 }
 
 #[derive(Serialize)]
@@ -38,6 +40,7 @@ enum ApiError {
     Conflict,
     NotFound,
     Unavailable,
+    RateLimited,
 }
 
 impl IntoResponse for ApiError {
@@ -59,6 +62,11 @@ impl IntoResponse for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "service_unavailable",
                 "authentication service unavailable",
+            ),
+            Self::RateLimited => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                "too many sign-in attempts",
             ),
         };
         (
@@ -175,6 +183,15 @@ async fn workspace(
 pub(crate) fn routes(store: PostgresStore) -> Router {
     Router::new()
         .route("/api/v1/auth/me", get(me))
+        .route(
+            "/api/v1/auth/login",
+            axum::routing::post(onboarding::login)
+                .layer(axum::extract::DefaultBodyLimit::max(2048)),
+        )
+        .route(
+            "/api/v1/auth/logout",
+            axum::routing::post(onboarding::logout),
+        )
         .route("/api/v1/workspaces", get(workspaces))
         .route("/api/v1/workspaces/{id}", get(workspace))
         .route(
@@ -193,5 +210,8 @@ pub(crate) fn routes(store: PostgresStore) -> Router {
             "/api/v1/workspaces/{id}/tasks/{task}",
             get(records::get_task).patch(records::update_task),
         )
-        .with_state(ApiState { store })
+        .with_state(ApiState {
+            store,
+            login_limit: std::sync::Arc::new(onboarding::LoginLimit::default()),
+        })
 }

@@ -40,7 +40,7 @@
   <!-- <img alt="Updated" src="https://img.shields.io/badge/Updated-YYYY--MM--DD-brightgreen"> -->
 </p>
 
-**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server has local-only health, authenticated identity/workspace metadata and optional PostgreSQL-backed Tasks/Projects create/read/update APIs. HTTP login, remote access and synchronization are not implemented.
+**Status:** Early local prototype. Tasks and Projects have functional shared operations, SQLite persistence, CLI commands and Ratatui panels. The server has local-only health, authenticated identity/workspace metadata and optional PostgreSQL-backed Tasks/Projects create/read/update APIs. Trusted administrator account creation and development-only loopback HTTP login/logout are implemented. Remote deployment and synchronization are not implemented.
 
 ## Overview
 
@@ -78,7 +78,7 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. The development server has loopback health plus optional PostgreSQL-backed authenticated identity, workspace metadata and Tasks/Projects read/write APIs. The development CLI can **read** remote workspaces, projects and tasks with an existing bearer session through an explicit loopback address. HTTP login, remote deployment and cross-device synchronisation are **not implemented**.
+**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. The development server has loopback health plus optional PostgreSQL-backed authenticated identity, workspace metadata and Tasks/Projects read/write APIs. The development CLI can **read** remote workspaces, projects and tasks with an existing bearer session through an explicit loopback address. Restricted loopback login/logout and local administrator provisioning are supported in development. Public registration, remote deployment and cross-device synchronisation are **not implemented**.
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
@@ -159,6 +159,36 @@ See [read-only client/server connectivity](docs/client-server-readonly.md)
 for constraints, authentication and test instructions. **Do not use the
 remote list endpoints for backup:** the server currently caps them at 200
 records and has no pagination.
+
+### Account and device onboarding (PR #17)
+
+Trusted server administrators can create accounts with a private Personal
+workspace, or revoke devices, without exposing account creation over HTTP.
+
+~~~sh
+# On the server with POS_SERVER_DATABASE_URL configured:
+pos-server admin create-user --email user@example.test
+# New password and confirmation are prompted privately.
+~~~
+
+A client can sign in through the **loopback-only** server (or protected SSH
+local port forward), without manually copying bearer tokens:
+
+~~~sh
+pos remote login --email user@example.test --device-label ThinkPad
+pos remote me
+pos remote workspaces
+pos remote logout
+~~~
+
+Login saves a private session file at `~/.config/pos/session.token`, and a
+device UUID at `session.device`, both with owner-only permissions. Tokens
+expire after 24 hours; run `pos remote login --email user@example.test
+--replace` to renew. The server rate-limits login and checks revocation.
+
+See [account and device onboarding](docs/account-onboarding.md) for
+security requirements, lifecycle, revocation and test instructions.
+The TUI remains local-only and synchronization remains unimplemented.
 
 ### Task Engine v2
 
@@ -322,7 +352,7 @@ Root and per-crate AGENTS.md files document development boundaries. Architectura
 | Background work | Rust scheduler/worker and persistent database-backed jobs |
 | Service supervision | systemd on Linux |
 
-Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server has local-only HTTP health plus optional PostgreSQL-backed authenticated workspace metadata and Tasks/Projects create/read/update operations (no hard delete). There are no HTTP login/registration routes, sync or remote-access support. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
+Ratatui, Clap, SQLite and SQLx are used for local Tasks and Projects. The Axum server has local-only HTTP health plus optional PostgreSQL-backed authenticated workspace metadata and Tasks/Projects create/read/update operations (no hard delete). There are development-only loopback password login/logout routes and local trusted administrator account creation, but no public registration, sync or remote deployment. Performance goals include rapid startup, non-blocking navigation and low resource usage; no formal benchmarks exist yet.
 
 ## Roadmap
 
@@ -341,7 +371,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated identity/workspace metadata and Tasks/Projects create/read/update, deny-by-default workspace roles and user/device credential primitives, a development-only authenticated **read-only remote CLI** using explicit loopback addresses, and CI.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated identity/workspace metadata and Tasks/Projects create/read/update, deny-by-default workspace roles and user/device credential primitives, a development-only authenticated **read-only remote CLI** using explicit loopback addresses, atomic account/workspace provisioning, password-based device onboarding and revocation, and CI.
 - **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server Tasks/Projects pagination/filtering and full lifecycle, public login/registration, production-grade tenant security, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
@@ -387,7 +417,7 @@ per-user Argon2id password hashing, canonical user accounts, device UUIDs,
 revocation/disablement checks. Integration tests run on a disposable
 PostgreSQL database.
 
-**There are no HTTP login, registration or password-provisioning endpoints.**
+The original Phase 9b had no HTTP login; PR #17 adds development-only loopback login/logout, while trusted account creation remains local-only.
 The read-only `/api/v1/auth/me` endpoint validates an existing session. An
 identity alone grants no workspace access. Do not expose the listener or
 assume production-ready tenant isolation. See
@@ -399,8 +429,8 @@ With a dedicated PostgreSQL database configured via `POS_SERVER_DATABASE_URL`,
 the loopback-only server also supports bearer-authenticated
 `GET /api/v1/auth/me` and user-scoped `GET /api/v1/workspaces`
 / `GET /api/v1/workspaces/{id}` endpoints. Personal workspaces are owner-only;
-shared workspaces require explicit viewer/editor membership. There are no
-HTTP login, workspace mutation or synchronization routes; Tasks/Projects
+shared workspaces require explicit viewer/editor membership. PR #17 adds loopback-only HTTP login/logout; there are no public
+workspace mutation or synchronization routes; Tasks/Projects
 have their own workspace-scoped create/read/update endpoints.
 A default launch without the database variable remains health-only.
 See [Phase 9c security and migration notes](docs/authenticated-api-foundation.md).
@@ -413,7 +443,7 @@ inside accessible workspaces. Viewers may only read; editors and owners may
 write. All updates require a matching record version to prevent silent lost
 updates. PostgreSQL forbids links to projects in other workspaces.
 
-There are no HTTP delete, login/registration or sync endpoints, and no automatic
+There are no HTTP delete, public registration or sync endpoints, and no automatic
 relationship to the local SQLite client. See
 [server Tasks/Projects APIs and security limitations](docs/server-records.md).
 
