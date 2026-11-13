@@ -78,7 +78,7 @@ POS is intended to be **written in-house**. PostgreSQL, SQLite and Git are imple
 
 ## Quick Start
 
-**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. On develop, the server has loopback health plus optional PostgreSQL-backed authenticated user/workspace metadata APIs and strict per-workspace visibility; HTTP login, server Tasks/Projects APIs and cross-device synchronisation are **not implemented**.
+**Working:** Local Tasks and Projects with SQLite via SQLx, shared service operations, a scriptable Clap CLI and Ratatui UI. The development server has loopback health plus optional PostgreSQL-backed authenticated identity, workspace metadata and Tasks/Projects read/write APIs. The development CLI can **read** remote workspaces, projects and tasks with an existing bearer session through an explicit loopback address. HTTP login, remote deployment and cross-device synchronisation are **not implemented**.
 
 Install Rust via rustup if needed; this repository pins Rust 1.99.1.
 
@@ -137,6 +137,28 @@ Keyboard hints are contextual and separated for readability. See
 **Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open the selected project's own overview. Within a project, `j/k` selects Overview, Tasks, Notes, Files, Calendar or Activity; `Enter` on Tasks opens its filtered list, and `Esc` or Back returns to the project list. Other sections are planned, not yet functional. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
 
 Projects currently provide **one-to-many task grouping only**. Project membership, permissions, recurrence, subprojects, calendar integration and server sync are not implemented.
+
+### Development-only client-server reads (PR #16)
+
+The client CLI can inspect an authenticated POS server **without changing
+local SQLite data**. This early connectivity is separate from the local
+TUI and requires a previously provisioned, valid device-bound session token.
+Only explicit loopback URLs (or an SSH-forwarded local port) are accepted;
+there is no remote write path, public login, remote deployment, or sync.
+
+~~~sh
+export POS_SERVER_URL=http://127.0.0.1:8787
+export POS_SERVER_TOKEN_FILE="$HOME/.config/pos/session.token"  # Existing token, owner-only 0600
+./target/debug/pos remote me
+./target/debug/pos remote workspaces --json
+./target/debug/pos remote projects <workspace-uuid>
+./target/debug/pos remote tasks <workspace-uuid> --json
+~~~
+
+See [read-only client/server connectivity](docs/client-server-readonly.md)
+for constraints, authentication and test instructions. **Do not use the
+remote list endpoints for backup:** the server currently caps them at 200
+records and has no pagination.
 
 ### Task Engine v2
 
@@ -319,7 +341,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated identity/workspace metadata and Tasks/Projects create/read/update, deny-by-default workspace roles and user/device credential primitives (develop only), and CI.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated identity/workspace metadata and Tasks/Projects create/read/update, deny-by-default workspace roles and user/device credential primitives, a development-only authenticated **read-only remote CLI** using explicit loopback addresses, and CI.
 - **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server Tasks/Projects pagination/filtering and full lifecycle, public login/registration, production-grade tenant security, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.
