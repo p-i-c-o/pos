@@ -13,4 +13,7 @@ Never silently overwrite conflicting edits or treat local queueing as server ack
 ## Verification
 
 Future tests should cover disconnected operation, duplication and divergent histories.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+PR #18 uses pos-entities LocalRecordId and defines typed pending changes and a pure, conservative revision
+comparison. It does not implement transport, server mapping,
+acknowledgements, conflict resolution, persistence or remote uploads.
+Never infer successful sync from queued events. See docs/sync-foundations.md.

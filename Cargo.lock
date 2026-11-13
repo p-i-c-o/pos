@@ -1522,6 +1522,11 @@ dependencies = [
 [[package]]
 name = "pos-entities"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "pos-events"
@@ -1614,9 +1619,12 @@ dependencies = [
 name = "pos-sqlite"
 version = "0.1.0"
 dependencies = [
+ "pos-entities",
  "pos-projects",
  "pos-storage",
+ "pos-sync",
  "pos-tasks",
+ "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
@@ -1633,6 +1641,11 @@ dependencies = [
 [[package]]
 name = "pos-sync"
 version = "0.1.0"
+dependencies = [
+ "pos-entities",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "pos-tasks"

@@ -190,6 +190,30 @@ See [account and device onboarding](docs/account-onboarding.md) for
 security requirements, lifecycle, revocation and test instructions.
 The TUI remains local-only and synchronization remains unimplemented.
 
+### Offline synchronization foundations (PR #18)
+
+An **additive SQLite migration** assigns stable local UUIDs to existing
+Tasks and Projects and creates a transactional, append-only change journal.
+Subsequent insert/update/delete operations record versioned JSON snapshots or
+deletion tombstones in the same transaction. Local sync IDs are wrapped in a
+separate Rust type to prevent accidental mixing with server UUIDs.
+Existing integer IDs, TUI and
+CLI contracts remain unchanged. A small shared `pos-sync` library defines
+change records and a conservative, version-based conflict decision.
+
+**Back up your current POS SQLite database before first launching a build
+containing this migration.** It changes the on-disk schema. The journal
+contains plaintext copies of edited fields and grows until a future
+verified server acknowledgement mechanism is built. Restored/cloned
+databases must not be connected as independent devices until device
+fencing and idempotency are implemented.
+
+**Nothing synchronizes yet:** no uploads/downloads, server mapping,
+automatic acknowledgement, conflict overwrite, JSON export of the journal,
+or background network activity. The current local TUI stays offline.
+
+See [sync foundations and migration/rollback guidance](docs/sync-foundations.md).
+
 ### Task Engine v2
 
 Local tasks now support **priorities** (low, normal, high, urgent), **statuses** (todo, in-progress, blocked, completed), and optional multiline descriptions. Existing tasks automatically migrate to normal priority, with existing completed tasks mapped to completed status. The legacy boolean completed flag remains consistent with the status for CLI and Ratatui compatibility.
@@ -371,7 +395,7 @@ Security boundaries, data portability and multiuser-aware modelling must be cons
 
 ## Results
 
-- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated identity/workspace metadata and Tasks/Projects create/read/update, deny-by-default workspace roles and user/device credential primitives, a development-only authenticated **read-only remote CLI** using explicit loopback addresses, atomic account/workspace provisioning, password-based device onboarding and revocation, and CI.
+- **What works:** 27-crate workspace; local Tasks/Projects, task descriptions/priorities/statuses and validated search/sorting, project links and filters, SQLite/SQLx migrations, CLI and Ratatui management, consistent validated SQLite backups, no-overwrite restore into a new DB, versioned JSON export, integrity checks, loopback HTTP health server, optional PostgreSQL-backed authenticated identity/workspace metadata and Tasks/Projects create/read/update, deny-by-default workspace roles and user/device credential primitives, a development-only authenticated **read-only remote CLI** using explicit loopback addresses, atomic account/workspace provisioning, password-based device onboarding and revocation, additive local stable record UUIDs, an append-only offline change journal, and CI.
 - **What doesn't (yet):** Automatic backup scheduling/rotation, JSON import, other functional modules, server Tasks/Projects pagination/filtering and full lifecycle, public login/registration, production-grade tenant security, recurrence and cross-device sync.
 - **Measurements / data:** No performance benchmarks or reliability measurements yet.
 - **Media:** No screenshots or demos yet.

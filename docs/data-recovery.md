@@ -4,6 +4,27 @@ This is the supported manual recovery workflow for POS's **local** SQLite tasks
 and projects. It does not cover server storage, cross-device sync, retention
 automation or encrypted backups, none of which are implemented yet.
 
+## Sync migration and queue preservation (PR #18)
+
+The optional development version of POS adds a **new SQLite migration** for
+stable local record UUIDs and a durable append-only `pos_sync_outbox` table.
+Back up a live database using the existing POS backup command **before**
+first opening it with a PR #18 build. This schema change is not automatically
+reversed by downgrading the POS binary.
+
+A regular SQLite backup and no-overwrite restore preserve the UUIDs,
+journal history and deletion tombstones. The versioned JSON export
+continues exporting only the user-facing Tasks and Projects; it does
+**not** preserve journal history or stable sync IDs, and is **not** a
+substitute for a SQLite backup. Keep multiple backups and never sync two
+independently writable clones from the same backup without device fencing.
+
+The journal also records plaintext historical versions of fields and can
+grow indefinitely until server acknowledgement/compaction is implemented.
+Do not delete outbox rows to save space. See
+[sync foundations](sync-foundations.md) for schema details, limitations
+and a rollback procedure.
+
 ## Database location
 
 By default, POS stores data at:

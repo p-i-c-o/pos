@@ -11,6 +11,7 @@ use sqlx::{
 };
 use std::path::Path;
 
+mod journal;
 mod maintenance;
 pub use maintenance::SqliteMaintenance;
 
