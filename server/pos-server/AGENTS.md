@@ -12,4 +12,4 @@ No separate worker executable. All shared operations require authentication and 
 
 ## Verification
 
-Tests cover startup, loopback-only binding, health routes, graceful shutdown and error handling. Optional PostgreSQL-backed GET-only identity and scoped workspace metadata endpoints validate active bearer sessions on each request. The server has no public login/registration, Tasks/Projects data APIs, worker jobs, remote access or sync. Never expose it to remote clients.
+Tests cover startup, loopback-only binding, health routes, graceful shutdown and error handling. Optional PostgreSQL-backed identity/workspace metadata and server Tasks/Projects create/read/update endpoints validate active bearer sessions on each request. Workspace access is rechecked at the repository boundary. The server has no public login/registration, hard-delete routes, worker jobs, remote access or sync. Never expose it to remote clients.

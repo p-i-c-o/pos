@@ -94,8 +94,9 @@ any migrations or data writes.
 
 ## What remains
 
-Authenticated Tasks/Projects server storage and synchronization are not
-implemented. The permission model here is deliberately minimal. Before
+Authenticated server Tasks/Projects create/read/update is now implemented in
+Phase 9d ([details](server-records.md)); cross-device synchronization remains
+unimplemented. The permission model here is deliberately minimal. Before
 adding business data, implement ownership-aware repository interfaces,
 transaction-level authorization, stronger tenancy guarantees, and security
 tests. Later plan account provisioning/login flows, HTTPS/rate limiting,

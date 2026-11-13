@@ -48,11 +48,11 @@ async fn creates_and_reuses_instance_identity() {
             .await
             .unwrap();
     assert_eq!(
-        applied, 3,
+        applied, 4,
         "all versioned migrations must be applied exactly once"
     );
 
-    for name in ["pos_tasks", "pos_projects"] {
+    for name in ["pos_notes", "pos_calendars"] {
         let exists: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
             .bind(name)
             .fetch_one(&raw)
@@ -67,6 +67,8 @@ async fn creates_and_reuses_instance_identity() {
         "pos_sessions",
         "pos_workspaces",
         "pos_workspace_members",
+        "pos_projects",
+        "pos_tasks",
     ] {
         let exists: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
             .bind(table)

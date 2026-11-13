@@ -1,8 +1,8 @@
 # PostgreSQL server storage foundation (Phase 9a)
 
 **Development milestone only.** This crate is not present in tagged v0.1.0
-as a functional server database. It is optionally wired into Axum read-only authenticated identity/workspace
-metadata endpoints, but does not store Tasks or Projects. Phase 9b added
+as a functional server database. It is optionally wired into Axum authenticated identity/workspace
+metadata and Tasks/Projects create/read/update endpoints. Phase 9b added
 trusted-only user/device credentials, and Phase 9c adds workspace scopes.
 
 ## What it provides

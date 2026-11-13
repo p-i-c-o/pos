@@ -2,6 +2,8 @@
 //! No login, registration, workspace administration or Tasks/Projects routes.
 //! Authorization is evaluated afresh for each request against PostgreSQL.
 
+mod records;
+
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -32,6 +34,8 @@ struct ApiErrorResponse {
 #[derive(Debug)]
 enum ApiError {
     Unauthorized,
+    BadRequest,
+    Conflict,
     NotFound,
     Unavailable,
 }
@@ -43,6 +47,12 @@ impl IntoResponse for ApiError {
                 StatusCode::UNAUTHORIZED,
                 "unauthorized",
                 "invalid or missing bearer token",
+            ),
+            Self::BadRequest => (StatusCode::BAD_REQUEST, "bad_request", "invalid request"),
+            Self::Conflict => (
+                StatusCode::CONFLICT,
+                "conflict",
+                "stale version or duplicate record",
             ),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "resource not found"),
             Self::Unavailable => (
@@ -167,5 +177,21 @@ pub(crate) fn routes(store: PostgresStore) -> Router {
         .route("/api/v1/auth/me", get(me))
         .route("/api/v1/workspaces", get(workspaces))
         .route("/api/v1/workspaces/{id}", get(workspace))
+        .route(
+            "/api/v1/workspaces/{id}/projects",
+            get(records::list_projects).post(records::create_project),
+        )
+        .route(
+            "/api/v1/workspaces/{id}/projects/{project}",
+            get(records::get_project).patch(records::update_project),
+        )
+        .route(
+            "/api/v1/workspaces/{id}/tasks",
+            get(records::list_tasks).post(records::create_task),
+        )
+        .route(
+            "/api/v1/workspaces/{id}/tasks/{task}",
+            get(records::get_task).patch(records::update_task),
+        )
         .with_state(ApiState { store })
 }

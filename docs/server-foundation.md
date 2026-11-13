@@ -98,5 +98,6 @@ verifies no POS user data was created or modified.
 
 Future milestones: connect authenticated identity and PostgreSQL to secure
 server APIs, establish workspace-scoped authorization and eventually synchronize.
-The server now optionally uses PostgreSQL for authenticated, read-only
-user/workspace metadata; it still exposes no login or Tasks/Projects data APIs.
+The server now optionally uses PostgreSQL for authenticated user/workspace
+metadata and workspace-scoped Tasks/Projects APIs. It still exposes no public
+login, registration or remote-access support.
