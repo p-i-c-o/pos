@@ -12,5 +12,11 @@ Keep storage, network connections and business rules out of rendering. Do not bl
 
 ## Verification
 
-Future tests should cover navigation, rendering and terminal cleanup.
-Tasks and Projects panels are interactive. Send requests to the CLI-owned worker, render responses and keep other modules as placeholders.
+Tests cover navigation, focus-marker uniqueness, 100x32 rendering,
+Settings/Back behavior, seven-day usage ranking and local Tasks/Projects input.
+The root CLI continues to own SQLite and its worker.
+The only TUI-specific disk state is module-visit timestamps under
+XDG_STATE_HOME/pos/navigation.tsv (fallback ~/.local/state/pos).
+Only read this history at startup and write events on a separate thread.
+Never store task/project content or credentials in UI history.
+Keep placeholders separate from implemented modules and do not block keyboard input on I/O.
