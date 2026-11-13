@@ -12,5 +12,7 @@ Feature crates retain ownership of detailed domain models; prevent ambiguous or 
 
 ## Verification
 
-Future tests should cover ID uniqueness, link validity and scope boundaries.
-The current crate is a compiling scaffold only; do not imply that its future features exist.
+PR #18 introduces a typed local UUID ID, which cannot be passed where
+a raw server UUID is expected. The format serializes transparently to
+a UUID string; remote identity mapping and workspace scoping remain future
+work. Tests verify parsing and serialization.
