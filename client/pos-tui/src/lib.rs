@@ -38,6 +38,11 @@ const OVERVIEW_SECTION: usize = 0;
 const PROJECT_SECTION: usize = 1;
 const TASK_SECTION: usize = 2;
 const SETTINGS_SECTION: usize = 10;
+const PROJECT_PAGES: &[&str] = &[
+    "Back", "", "Overview", "Tasks", "Notes", "Files", "Calendar", "Activity",
+];
+const PROJECT_OVERVIEW_PAGE: usize = 2;
+const PROJECT_TASKS_PAGE: usize = 3;
 
 #[derive(Debug)]
 pub enum UiRequest {
@@ -69,6 +74,7 @@ enum Focus {
     Navigation,
     Tasks,
     Projects,
+    ProjectDetail,
 }
 
 #[derive(Debug)]
@@ -93,6 +99,8 @@ struct App {
     settings_selected: usize,
     task_selected: usize,
     project_selected: usize,
+    active_project: Option<i64>,
+    project_page_selected: usize,
     tasks: Vec<Task>,
     projects: Vec<Project>,
     filter: Option<String>,
@@ -121,6 +129,11 @@ impl App {
             self.project_selected = self
                 .project_selected
                 .min(self.projects.len().saturating_sub(1));
+            // If a project was deleted by any client, don't keep showing a
+            // stale workspace or accidentally switch to another project.
+            if self.active_project.is_some() && self.open_project().is_none() {
+                self.close_project();
+            }
         }
         if !result.is_error {
             self.filter = result.filter;
@@ -137,6 +150,49 @@ impl App {
         self.projects.get(self.project_selected)
     }
 
+    fn open_project(&self) -> Option<&Project> {
+        let id = self.active_project?;
+        self.projects.iter().find(|project| project.id == id)
+    }
+
+    fn close_project(&mut self) {
+        self.active_project = None;
+        self.project_page_selected = PROJECT_OVERVIEW_PAGE;
+        if self.focus == Focus::ProjectDetail {
+            self.focus = Focus::Projects;
+        }
+    }
+
+    fn open_selected_project(&mut self) {
+        if let Some(project) = self.selected_project() {
+            self.active_project = Some(project.id);
+            self.project_page_selected = PROJECT_OVERVIEW_PAGE;
+            self.focus = Focus::ProjectDetail;
+        }
+    }
+
+    fn activate_project_page(&mut self) -> KeyOutcome {
+        match self.project_page_selected {
+            0 => {
+                self.close_project();
+                KeyOutcome::Nothing
+            }
+            PROJECT_TASKS_PAGE => {
+                let Some(slug) = self.open_project().map(|p| p.slug.clone()) else {
+                    self.close_project();
+                    return KeyOutcome::Nothing;
+                };
+                self.close_project();
+                self.selected = TASK_SECTION;
+                self.focus = Focus::Tasks;
+                self.task_selected = 0;
+                self.record_visit(TASK_SECTION);
+                KeyOutcome::Request(UiRequest::Filter(Some(slug)))
+            }
+            _ => KeyOutcome::Nothing,
+        }
+    }
+
     fn begin_input(&mut self, editor: Editor, value: String) {
         self.input = value;
         self.editor = Some(editor);
@@ -145,6 +201,7 @@ impl App {
     fn current_focus(&self) -> Focus {
         match self.selected {
             TASK_SECTION => Focus::Tasks,
+            PROJECT_SECTION if self.active_project.is_some() => Focus::ProjectDetail,
             PROJECT_SECTION => Focus::Projects,
             _ => Focus::Navigation,
         }
@@ -190,6 +247,9 @@ impl App {
                 (current + order.len() - 1) % order.len()
             };
             self.selected = order[next];
+            if self.selected != PROJECT_SECTION {
+                self.close_project();
+            }
         }
         self.show_help = false;
     }
@@ -232,6 +292,8 @@ impl App {
                 } else if self.settings_open {
                     self.settings_open = false;
                     self.focus = Focus::Navigation;
+                } else if self.focus == Focus::ProjectDetail {
+                    self.close_project();
                 } else if self.focus != Focus::Navigation {
                     self.focus = Focus::Navigation;
                 } else {
@@ -268,17 +330,10 @@ impl App {
                 KeyOutcome::Nothing
             }
             KeyCode::Enter if self.focus == Focus::Projects => {
-                if let Some(project) = self.selected_project() {
-                    let slug = project.slug.clone();
-                    self.selected = TASK_SECTION;
-                    self.focus = Focus::Tasks;
-                    self.task_selected = 0;
-                    self.record_visit(TASK_SECTION);
-                    KeyOutcome::Request(UiRequest::Filter(Some(slug)))
-                } else {
-                    KeyOutcome::Nothing
-                }
+                self.open_selected_project();
+                KeyOutcome::Nothing
             }
+            KeyCode::Enter if self.focus == Focus::ProjectDetail => self.activate_project_page(),
             KeyCode::Down | KeyCode::Char('j') => {
                 match self.focus {
                     Focus::Navigation => self.move_navigation(true),
@@ -287,6 +342,16 @@ impl App {
                     }
                     Focus::Projects if !self.projects.is_empty() => {
                         self.project_selected = (self.project_selected + 1) % self.projects.len();
+                    }
+                    Focus::ProjectDetail => {
+                        let mut next = self.project_page_selected;
+                        loop {
+                            next = (next + 1) % PROJECT_PAGES.len();
+                            if !PROJECT_PAGES[next].is_empty() {
+                                break;
+                            }
+                        }
+                        self.project_page_selected = next;
                     }
                     _ => {}
                 }
@@ -302,6 +367,16 @@ impl App {
                     Focus::Projects if !self.projects.is_empty() => {
                         self.project_selected =
                             (self.project_selected + self.projects.len() - 1) % self.projects.len();
+                    }
+                    Focus::ProjectDetail => {
+                        let mut next = self.project_page_selected;
+                        loop {
+                            next = (next + PROJECT_PAGES.len() - 1) % PROJECT_PAGES.len();
+                            if !PROJECT_PAGES[next].is_empty() {
+                                break;
+                            }
+                        }
+                        self.project_page_selected = next;
                     }
                     _ => {}
                 }
@@ -651,20 +726,123 @@ mod tests {
     }
 
     #[test]
-    fn projects_open_filtered_tasks_without_losing_context() {
+    fn projects_open_own_hub_and_tasks_are_an_explicit_section() {
+        let mut app = App {
+            selected: PROJECT_SECTION,
+            projects: vec![project()],
+            tasks: vec![task()],
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Enter)); // focus Projects list
+        assert_eq!(app.focus, Focus::Projects);
+        assert!(matches!(
+            app.handle_key(key(KeyCode::Enter)),
+            KeyOutcome::Nothing
+        ));
+        assert_eq!(
+            app.selected, PROJECT_SECTION,
+            "opening a project is not opening Tasks"
+        );
+        assert_eq!(app.focus, Focus::ProjectDetail);
+        assert_eq!(app.active_project, Some(5));
+        let (hub, markers) = snapshot(&app);
+        assert!(hub.contains("Project - University"));
+        assert!(hub.contains("Project Overview"));
+        assert!(hub.contains("Notes"));
+        assert!(hub.contains("Files"));
+        assert!(hub.contains("Calendar"));
+        assert!(hub.contains("Activity"));
+        assert_eq!(markers.len(), 1);
+        assert!(markers[0].0 >= 22, "focus stays in project hub");
+
+        app.handle_key(key(KeyCode::Down)); // select Tasks explicitly
+        assert_eq!(app.project_page_selected, PROJECT_TASKS_PAGE);
+        assert!(matches!(
+            app.handle_key(key(KeyCode::Enter)),
+            KeyOutcome::Request(UiRequest::Filter(Some(ref slug))) if slug == "university"
+        ));
+        assert_eq!(app.selected, TASK_SECTION);
+        assert_eq!(app.focus, Focus::Tasks);
+        assert_eq!(app.active_project, None);
+    }
+
+    #[test]
+    fn project_pages_are_separate_and_back_restores_project_list() {
         let mut app = App {
             selected: PROJECT_SECTION,
             projects: vec![project()],
             ..App::default()
         };
-        app.handle_key(key(KeyCode::Enter)); // focus projects
-        assert_eq!(app.focus, Focus::Projects);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        for _ in 0..2 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        assert_eq!(app.project_page_selected, 4, "Notes is distinct from Tasks");
+        let (notes, markers) = snapshot(&app);
+        assert!(notes.contains("Project notes are planned"));
+        assert_eq!(markers.len(), 1);
         assert!(matches!(
             app.handle_key(key(KeyCode::Enter)),
-            KeyOutcome::Request(UiRequest::Filter(Some(ref slug))) if slug=="university"
+            KeyOutcome::Nothing
         ));
-        assert_eq!(app.selected, TASK_SECTION);
-        assert_eq!(app.focus, Focus::Tasks);
+        assert_eq!(app.selected, PROJECT_SECTION);
+        assert_eq!(app.focus, Focus::ProjectDetail);
+
+        app.handle_key(key(KeyCode::Up)); // Tasks
+        app.handle_key(key(KeyCode::Up)); // Overview
+        app.handle_key(key(KeyCode::Up)); // Back, skipping separator
+        assert_eq!(app.project_page_selected, 0);
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.active_project, None);
+        assert_eq!(app.focus, Focus::Projects);
+        let (projects, markers) = snapshot(&app);
+        assert!(projects.contains("Workspace - Projects"));
+        assert!(!projects.contains("Project - University"));
+        assert_eq!(markers.len(), 1);
+
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.focus, Focus::ProjectDetail);
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.focus, Focus::Projects);
+        assert_eq!(app.active_project, None);
+    }
+
+    #[test]
+    fn project_view_fails_closed_when_project_disappears() {
+        let mut app = App {
+            selected: PROJECT_SECTION,
+            projects: vec![project()],
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.active_project, Some(5));
+        app.accept_response(UiResponse {
+            tasks: None,
+            projects: Some(vec![]),
+            filter: None,
+            status: "Projects refreshed".into(),
+            is_error: false,
+        });
+        assert_eq!(app.active_project, None);
+        assert_eq!(app.focus, Focus::Projects);
+    }
+
+    #[test]
+    fn project_hub_does_not_claim_task_counts_from_another_filter() {
+        let mut app = App {
+            selected: PROJECT_SECTION,
+            projects: vec![project()],
+            tasks: vec![task()],
+            filter: Some("another-project".into()),
+            ..App::default()
+        };
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        let (hub, _) = snapshot(&app);
+        assert!(hub.contains("Task counts unavailable"));
+        assert!(!hub.contains("1 linked tasks"));
     }
 
     #[test]

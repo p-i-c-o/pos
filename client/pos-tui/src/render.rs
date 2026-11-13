@@ -10,7 +10,8 @@ use ratatui::{
 };
 
 use super::{
-    App, Editor, Focus, OVERVIEW_SECTION, PROJECT_SECTION, SECTIONS, SETTINGS_ITEMS, TASK_SECTION,
+    App, Editor, Focus, OVERVIEW_SECTION, PROJECT_PAGES, PROJECT_SECTION, PROJECT_TASKS_PAGE,
+    SECTIONS, SETTINGS_ITEMS, TASK_SECTION,
 };
 
 fn login_name() -> String {
@@ -214,6 +215,10 @@ fn workspace_title(app: &App) -> String {
         } else {
             format!("Settings - {selected}")
         }
+    } else if app.selected == PROJECT_SECTION && app.active_project.is_some() {
+        app.open_project()
+            .map(|project| format!("Project - {}", project.name))
+            .unwrap_or_else(|| "Workspace - Projects".into())
     } else if app.selected == TASK_SECTION {
         match app.filter.as_deref() {
             Some(slug) => {
@@ -279,6 +284,136 @@ fn settings_lines(app: &App) -> Text<'static> {
     }
 }
 
+/// A project is a workspace context, not a synonym for its task list.
+/// Only Tasks is operational today; other sections are explicitly marked
+/// planned rather than pretending to persist project notes or files.
+fn draw_project_hub(
+    frame: &mut Frame<'_>,
+    app: &App,
+    area: ratatui::layout::Rect,
+    block: Block<'_>,
+) {
+    let Some(project) = app.open_project() else {
+        return;
+    };
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(4), Constraint::Min(3)])
+        .split(inner);
+
+    let state = if project.archived {
+        "archived"
+    } else {
+        "active"
+    };
+    frame.render_widget(
+        Paragraph::new(Text::from(vec![
+            Line::from(format!("{}  [{}]", project.name, project.slug)),
+            Line::from(format!("Status: {state}")),
+        ]))
+        .style(Style::default().fg(Color::Cyan)),
+        rows[0],
+    );
+
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(20), Constraint::Min(15)])
+        .split(rows[1]);
+    let items: Vec<_> = PROJECT_PAGES
+        .iter()
+        .map(|page| {
+            if matches!(*page, "Notes" | "Files" | "Calendar" | "Activity") {
+                ListItem::new(*page).style(Style::default().fg(Color::DarkGray))
+            } else {
+                ListItem::new(*page)
+            }
+        })
+        .collect();
+    let list = List::new(items)
+        .highlight_style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol(if app.focus == Focus::ProjectDetail {
+            "> "
+        } else {
+            "  "
+        });
+    let mut selection = ListState::default().with_selected(Some(app.project_page_selected));
+    frame.render_stateful_widget(list, columns[0], &mut selection);
+
+    let task_list_is_relevant =
+        app.filter.is_none() || app.filter.as_deref() == Some(project.slug.as_str());
+    let task_summary = if task_list_is_relevant {
+        let linked: Vec<_> = app
+            .tasks
+            .iter()
+            .filter(|task| task.project_id == Some(project.id))
+            .collect();
+        format!(
+            "{} linked tasks ({} open)",
+            linked.len(),
+            linked.iter().filter(|task| !task.completed).count()
+        )
+    } else {
+        "Task counts unavailable with another filter active".into()
+    };
+
+    let details = match app.project_page_selected {
+        0 => vec![
+            Line::from("Back to Projects"),
+            Line::from(""),
+            Line::from("Press Enter to return to the project list."),
+        ],
+        PROJECT_TASKS_PAGE => vec![
+            Line::from("Tasks"),
+            Line::from(""),
+            Line::from(task_summary),
+            Line::from(""),
+            Line::from("Press Enter to open this project's task list."),
+        ],
+        4 => vec![
+            Line::from("Notes"),
+            Line::from(""),
+            Line::from("Project notes are planned, not implemented yet."),
+        ],
+        5 => vec![
+            Line::from("Files"),
+            Line::from(""),
+            Line::from("Project files are planned, not implemented yet."),
+        ],
+        6 => vec![
+            Line::from("Calendar"),
+            Line::from(""),
+            Line::from("Project calendar is planned, not implemented yet."),
+        ],
+        7 => vec![
+            Line::from("Activity"),
+            Line::from(""),
+            Line::from("Project activity is planned, not implemented yet."),
+        ],
+        _ => vec![
+            Line::from("Project Overview"),
+            Line::from(""),
+            Line::from(task_summary),
+            Line::from(""),
+            Line::from("A project is a home for related work."),
+            Line::from("Tasks are available now."),
+            Line::from("Notes, Files, Calendar and Activity are planned."),
+            Line::from(""),
+            Line::from("Choose a section on the left to explore."),
+        ],
+    };
+    frame.render_widget(
+        Paragraph::new(Text::from(details)).wrap(Wrap { trim: true }),
+        columns[1],
+    );
+}
+
 fn draw_workspace(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -303,7 +438,8 @@ fn draw_workspace(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect)
             Line::from("Tasks: a add  e edit  d due  p assign project"),
             Line::from("Tasks: u unassign  f filter  Space toggle  x delete"),
             Line::from("Projects: a add  e rename  Space archive  x delete"),
-            Line::from("Projects: Enter open filtered Tasks"),
+            Line::from("Projects: Enter open project overview"),
+            Line::from("Project: j/k select section  Enter open  Esc Back"),
             Line::from(""),
             Line::from("Settings: Enter select  Esc return"),
             Line::from("q / Ctrl+C     Quit POS"),
@@ -319,6 +455,8 @@ fn draw_workspace(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect)
                 .wrap(Wrap { trim: true }),
             area,
         );
+    } else if app.selected == PROJECT_SECTION && app.active_project.is_some() {
+        draw_project_hub(frame, app, area, block);
     } else if app.selected == TASK_SECTION {
         let items: Vec<_> = if app.tasks.is_empty() {
             vec![ListItem::new("No tasks yet - press a to add")]
@@ -453,7 +591,9 @@ fn keys_line(app: &App) -> &'static str {
     } else if app.focus == Focus::Tasks {
         " a Add   │   e Edit   │   d Due   │   p Project   │   Space Toggle   │   x Delete   │   Esc Back "
     } else if app.focus == Focus::Projects {
-        " a Add   │   e Rename   │   Space Archive   │   x Delete   │   Enter Open   │   Esc Back "
+        " a Add   │   e Rename   │   Space Archive   │   x Delete   │   Enter Open project   │   Esc Back "
+    } else if app.focus == Focus::ProjectDetail {
+        " j/k Sections   │   Enter Open   │   Esc Projects   │   Tab Navigation   │   ? Help "
     } else {
         " j/k Navigate   │   Enter Select   │   Tab Focus   │   ? Help   │   q Quit "
     }

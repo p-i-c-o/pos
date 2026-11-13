@@ -134,7 +134,7 @@ exactly one keyboard focus location, not the currently displayed section.
 Keyboard hints are contextual and separated for readability. See
 [TUI redesign notes](docs/tui-redesign.md).
 
-**Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open that project's filtered tasks. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
+**Ratatui:** Use `j/k` or arrows to select **Projects** or **Tasks**, then `Enter` to focus. Projects: `a` add, `e` rename, `Space` archive/restore, `x` delete with confirmation, `Enter` open the selected project's own overview. Within a project, `j/k` selects Overview, Tasks, Notes, Files, Calendar or Activity; `Enter` on Tasks opens its filtered list, and `Esc` or Back returns to the project list. Other sections are planned, not yet functional. Tasks: `a` add, `e` rename, `d` due date, `p` assign by project slug, `u` unassign, `f` change the project filter (empty input clears it), `Space` toggle completion and `x` delete with confirmation. `Esc` backs out, `?` shows help, `r` refreshes, and `q` quits. Data access happens in a worker separate from the event loop.
 
 Projects currently provide **one-to-many task grouping only**. Project membership, permissions, recurrence, subprojects, calendar integration and server sync are not implemented.
 

@@ -19,8 +19,14 @@ not modified.
 - Settings opens a second-level sidebar with Back, a blank divider, Git,
   GitHub, GitLab, User Account, General and About. Back or Esc returns
   to the main menu. Entries that are not implemented say so explicitly.
-- Right-panel titles change with context (Overview, Projects, Tasks / All,
-  Tasks / University, Settings / Git, and so on).
+- Right-panel titles change with context (Overview, Projects, Project /
+  University, Tasks / All, Tasks / University, Settings / Git, and so on).
+- Projects open into their own overview context. Each project presents a
+  section menu for Overview, Tasks, Notes, Files, Calendar and Activity.
+  Tasks is an explicitly selectable section, never an automatic redirect.
+  Other project sections are clear placeholders, not pretend data storage.
+  Esc or Back returns to the project list; the task filter still works when
+  Tasks is deliberately opened.
 - Workspace text and lists have extra horizontal padding.
 - Exactly one `>` is visible at the active keyboard focus, on either the
   navigation row, a focused Task/Project row, or the help overlay.
@@ -51,7 +57,7 @@ If `XDG_STATE_HOME` is not set, the path is
 ```
 
 Each row records a successful navigation activation: when Enter or Tab
-focuses a module, or a project opens its filtered Tasks list. Scrolling
+focuses a module, or a user explicitly opens the Tasks section of a project. Scrolling
 through the sidebar alone does not count as a visit. No task content,
 project names, user account data, passwords or tokens are stored.
 
@@ -75,8 +81,8 @@ cargo build -p pos-cli --locked
 ```
 
 Ratatui's test backend asserts the layout at exactly 100x32, including
-navigation, Settings, contextual titles, Overview and the one-marker
-focus invariant. Separate tests cover sorting across the seven-day window,
+navigation, Settings, contextual titles, Overview, project-specific
+section navigation and the one-marker focus invariant. Separate tests cover sorting across the seven-day window,
 stable tie ordering, persistent visit counting, invalid history entries,
 menu movement and existing interactive task/project operations.
 
