@@ -1,5 +1,7 @@
 //! POS executable: interactive TUI and scriptable Tasks and Projects CLI.
 
+mod remote;
+
 use clap::{Parser, Subcommand};
 use pos_core::{ProjectService, TaskEdit, TaskSearch, TaskService, export_local_data};
 use pos_sqlite::{SqliteMaintenance, SqliteTaskRepository};
@@ -42,6 +44,14 @@ enum Commands {
     Projects {
         #[command(subcommand)]
         action: ProjectAction,
+    },
+    /// Read-only remote POS server inspection (independent of local SQLite).
+    Remote {
+        /// Loopback server base URL, default POS_SERVER_URL or 127.0.0.1:8787.
+        #[arg(long, value_name = "URL")]
+        url: Option<String>,
+        #[command(subcommand)]
+        action: remote::RemoteAction,
     },
     /// Database integrity checks, lossless backup/restore and JSON export.
     Data {
@@ -231,6 +241,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
     // restore must never create or migrate the active POS database.
     let command = match command {
         Some(Commands::Data { action }) => return runtime.block_on(run_data(db, action)),
+        Some(Commands::Remote { url, action }) => {
+            return runtime.block_on(remote::execute(url.as_deref(), action));
+        }
         other => other,
     };
 
@@ -246,7 +259,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         Some(Commands::Projects { action }) => {
             runtime.block_on(run_projects(&projects, action))?;
         }
-        Some(Commands::Data { .. }) => unreachable!("maintenance handled before repository open"),
+        Some(Commands::Data { .. } | Commands::Remote { .. }) => {
+            unreachable!("non-local operations handled before repository open")
+        }
         None => {
             let (request_tx, request_rx) = mpsc::channel();
             let (response_tx, response_rx) = mpsc::channel();
