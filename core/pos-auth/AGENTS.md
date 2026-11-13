@@ -15,6 +15,7 @@ Never expose credentials, session secrets or tokens through logs or debug output
 Argon2id password verification and random bearer-token hashing are implemented
 with unit tests. Expiry, device revocation, session revocation and disabled-user
 checks are enforced by pos-postgres and tested using ephemeral CI PostgreSQL.
-No HTTP login, self-registration or token exposure endpoint exists yet.
-Do not log or serialize secrets through Debug; never expose private methods as
-unauthenticated HTTP handlers.
+PR #17 adds development-only loopback HTTP password login (returning a
+one-time session token) and bearer-authenticated logout. No public
+registration or internet-facing login exists. Never log credentials or
+serialize secrets via Debug; preserve rate limits and revocation checks.

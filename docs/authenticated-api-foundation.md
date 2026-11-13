@@ -1,7 +1,9 @@
 # Authenticated HTTP and workspace scopes (Phase 9c)
 
-Status: development-only feature branch. The tagged v0.1.0 release is not
-modified. The Rust client and Ratatui interface still use local SQLite.
+Status: historical Phase 9c design notes. The tagged v0.1.0 release is not
+modified. The Rust TUI still uses local SQLite. PR #17 subsequently added
+[development-only account onboarding](account-onboarding.md) over loopback
+HTTP; statements below about absent login routes describe Phase 9c.
 
 ## Behavior
 

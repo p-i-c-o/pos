@@ -88,6 +88,54 @@ impl PostgresStore {
         }
     }
 
+    /// Trusted-only atomic account bootstrap: create a user and exactly one
+    /// owner-only personal workspace in a single transaction.
+    /// Unlike two separate calls, failure cannot strand an account without
+    /// its initial workspace.
+    pub async fn provision_user_with_personal_workspace(
+        &self,
+        email: &str,
+        password: &str,
+    ) -> Result<(Uuid, Uuid), IdentityError> {
+        let email = normalize_email(email)?;
+        let password = Zeroizing::new(password.to_owned());
+        let hash = tokio::task::spawn_blocking(move || hash_password(&password))
+            .await
+            .map_err(|_| IdentityError::StorageUnavailable)?
+            .map_err(|_| IdentityError::InvalidInput)?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| IdentityError::StorageUnavailable)?;
+        let user = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO pos_users (login_email, password_hash) VALUES ($1, $2) RETURNING id",
+        )
+        .bind(email)
+        .bind(hash)
+        .fetch_one(&mut *tx)
+        .await;
+        let user = match user {
+            Ok(id) => id,
+            Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
+                return Err(IdentityError::AlreadyExists);
+            }
+            Err(_) => return Err(IdentityError::StorageUnavailable),
+        };
+        let workspace = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO pos_workspaces (owner_user_id, kind, name) VALUES ($1, 'personal', 'Personal') RETURNING id",
+        )
+        .bind(user)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| IdentityError::StorageUnavailable)?;
+        tx.commit()
+            .await
+            .map_err(|_| IdentityError::StorageUnavailable)?;
+        Ok((user, workspace))
+    }
+
     /// Password authentication optionally reuses an active device ID.
     /// A new device is enrolled only after successful password verification.
     /// Sessions are strictly tied to one active user and device, and expire

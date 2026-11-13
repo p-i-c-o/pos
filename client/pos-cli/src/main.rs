@@ -1,5 +1,6 @@
 //! POS executable: interactive TUI and scriptable Tasks and Projects CLI.
 
+mod onboarding;
 mod remote;
 
 use clap::{Parser, Subcommand};
