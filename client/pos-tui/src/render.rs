@@ -105,7 +105,12 @@ fn draw_navigation(frame: &mut Frame<'_>, app: &App, area: ratatui::layout::Rect
             .add_modifier(Modifier::BOLD)
     };
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(title))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .padding(Padding::new(0, 0, 1, 0)),
+        )
         .highlight_style(highlighted)
         .highlight_symbol(if app.focus == Focus::Navigation {
             "> "

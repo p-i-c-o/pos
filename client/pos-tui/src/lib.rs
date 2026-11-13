@@ -808,6 +808,10 @@ mod tests {
         assert!(navigation.contains("Workspace - Tasks / All"));
         assert_eq!(markers.len(), 1, "only sidebar may show focus marker");
         assert!(markers[0].0 < 22, "focus initially belongs to sidebar");
+        assert_eq!(
+            markers[0].1, 7,
+            "navigation items start one blank row below border"
+        );
 
         app.handle_key(key(KeyCode::Enter));
         let (_, markers) = snapshot(&app);
