@@ -48,7 +48,8 @@ async fn creates_and_reuses_instance_identity() {
             .await
             .unwrap();
     assert_eq!(
-        applied, 4,
+        applied,
+        sqlx::migrate!("./migrations").migrations.len() as i64,
         "all versioned migrations must be applied exactly once"
     );
 
@@ -69,6 +70,9 @@ async fn creates_and_reuses_instance_identity() {
         "pos_workspace_members",
         "pos_projects",
         "pos_tasks",
+        "pos_sync_workspace_clocks",
+        "pos_sync_changes",
+        "pos_sync_operation_receipts",
     ] {
         let exists: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
             .bind(table)
