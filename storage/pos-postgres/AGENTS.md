@@ -31,3 +31,10 @@ The crate is used by optional authenticated HTTP identity/workspace endpoints an
 and owner-only Personal workspace. The old `provision_user` remains intact.
 Server login/logout reuse existing password hashing and device-bound
 session/revocation methods. Keep identity SQL here, not in HTTP handlers.
+
+## PR #20 server-side protocol
+
+Server PostgreSQL now stores a transactional incremental change feed and
+per-device operation receipts, with authenticated GET/POST loopback endpoints.
+Client queue draining, automatic upload/download and delete/tombstone handling
+are not implemented. See docs/server-sync-protocol.md.

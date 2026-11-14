@@ -214,6 +214,14 @@ or background network activity. The current local TUI stays offline.
 
 See [sync foundations and migration/rollback guidance](docs/sync-foundations.md).
 
+### Server-side synchronization protocol (PR #20)
+
+The development-only server exposes workspace-scoped incremental change
+feeds and atomic, device-scoped, idempotent Tasks/Projects operations.
+It records each server write in a cursor-ordered PostgreSQL journal.
+**There is no automatic client-to-server synchronization yet.**
+See [server sync protocol](docs/server-sync-protocol.md).
+
 ### Explicit sync identity and workspace binding (PR #19)
 
 A new additive SQLite migration gives each database a persistent UUID.

@@ -22,3 +22,10 @@ credentials. User and Personal workspace creation is atomic. Loopback HTTP
 supports bounded rate-limited password login and bearer self-logout;
 no public registration or external exposure. Never log secrets.
 See docs/account-onboarding.md.
+
+## PR #20 server-side protocol
+
+Server PostgreSQL now stores a transactional incremental change feed and
+per-device operation receipts, with authenticated GET/POST loopback endpoints.
+Client queue draining, automatic upload/download and delete/tombstone handling
+are not implemented. See docs/server-sync-protocol.md.
