@@ -26,3 +26,13 @@ worker is implemented. Local int IDs and JSON export v2 stay unchanged.
 Read docs/sync-foundations.md and docs/data-recovery.md before editing
 schema or these triggers. Test rollback, foreign-key changes,
 pre-migration data preservation and backup/restore against disposable DBs.
+
+## One-workspace identity binding (PR #19)
+
+The new additive sync-identity migration adds an immutable singleton
+database UUID, one immutable workspace binding, and a durable local-to-server
+record mapping with positive monotonic revisions. Binding requires a separate
+authenticated server read and a path-specific private anchor created by the
+CLI. No server writes or sync are implemented. Restore/copy must not silently
+switch device, workspace or database identity. Tests: sync_identity plus
+sync_journal. Read docs/sync-identity-binding.md before changing these tables.

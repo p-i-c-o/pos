@@ -11,7 +11,9 @@ use sqlx::{
 };
 use std::path::Path;
 
+mod identity;
 mod journal;
+pub use identity::{BindOutcome, RecordMapping, SyncBinding, SyncState};
 mod maintenance;
 pub use maintenance::SqliteMaintenance;
 

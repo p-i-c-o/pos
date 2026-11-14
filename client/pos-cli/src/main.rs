@@ -2,6 +2,7 @@
 
 mod onboarding;
 mod remote;
+mod sync;
 
 use clap::{Parser, Subcommand};
 use pos_core::{ProjectService, TaskEdit, TaskSearch, TaskService, export_local_data};
@@ -53,6 +54,11 @@ enum Commands {
         url: Option<String>,
         #[command(subcommand)]
         action: remote::RemoteAction,
+    },
+    /// Explicit, offline-safe workspace identity binding; no synchronization.
+    Sync {
+        #[command(subcommand)]
+        action: sync::SyncAction,
     },
     /// Database integrity checks, lossless backup/restore and JSON export.
     Data {
@@ -245,6 +251,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         Some(Commands::Remote { url, action }) => {
             return runtime.block_on(remote::execute(url.as_deref(), action));
         }
+        Some(Commands::Sync { action }) => {
+            let path = database_path(db)?;
+            return runtime.block_on(sync::execute(path, action));
+        }
         other => other,
     };
 
@@ -260,8 +270,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
         Some(Commands::Projects { action }) => {
             runtime.block_on(run_projects(&projects, action))?;
         }
-        Some(Commands::Data { .. } | Commands::Remote { .. }) => {
-            unreachable!("non-local operations handled before repository open")
+        Some(Commands::Data { .. } | Commands::Remote { .. } | Commands::Sync { .. }) => {
+            unreachable!("special operations handled before regular repository open")
         }
         None => {
             let (request_tx, request_rx) = mpsc::channel();

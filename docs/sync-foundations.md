@@ -82,10 +82,18 @@ engine or a substitute for transactional server version checks. The
 client does not yet store server baseline versions or conflict snapshots,
 so no write is actually attempted. No remote PostgreSQL data is accessed.
 
+## PR #19 follow-up: identity and workspace binding
+
+PR #19 introduces a singleton database UUID, authenticated one-workspace
+binding, private path-specific anchor and internal local-to-server
+record/revision mapping. The binding verifies server *read* access, but
+does not upload or download data and does not populate the record maps.
+See [sync identity and binding](sync-identity-binding.md).
+
 ## Known unfinished requirements for sync
 
-Before enabling upload/download, we need explicit workspace membership
-binding, per-device identity, UUID mapping and server record import,
+Before enabling upload/download, we still need server record import and
+verified mapping population, server-backed device clone fencing,
 idempotency keys for retries, server-side version checks, a durable
 acknowledgement/high-watermark protocol, quarantine and resolution for
 conflicting versions, delete protection, and an ordering/replay strategy.

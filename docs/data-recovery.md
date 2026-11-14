@@ -25,6 +25,21 @@ Do not delete outbox rows to save space. See
 [sync foundations](sync-foundations.md) for schema details, limitations
 and a rollback procedure.
 
+## Bound database recovery (PR #19)
+
+A newly bound SQLite database also has a **private external sync anchor**
+under `$XDG_CONFIG_HOME/pos/sync-anchors/` (or
+`~/.config/pos/sync-anchors/`). This anchor is deliberately excluded from
+SQLite backup files and the JSON export. A restored copy retains its
+database UUID, workspace binding and record mapping, but will be
+**rejected by the sync binding/status commands if its path or anchor differs**.
+
+This prevents accidentally treating a restored copy as a new writable
+sync participant. There is no safe automatic rebind/move flow yet.
+Preserve the original database and private anchor, and do not edit the
+binding table or discard the anchor to bypass the safeguard.
+See [workspace binding](sync-identity-binding.md).
+
 ## Database location
 
 By default, POS stores data at:

@@ -251,6 +251,37 @@ struct Workspace {
     can_manage_members: bool,
 }
 
+/// Authenticated read-only preflight for explicit workspace binding.
+pub(crate) struct VerifiedWorkspace {
+    pub origin: String,
+    pub user_id: Uuid,
+    pub device_id: Uuid,
+    pub workspace_id: Uuid,
+}
+
+pub(crate) async fn verify_workspace(
+    url: Option<&str>,
+    workspace_id: Uuid,
+) -> Result<VerifiedWorkspace, Box<dyn Error>> {
+    let client = RemoteClient::new(url)?;
+    let identity: Identity = client.get("/api/v1/auth/me").await?;
+    let available: Vec<Workspace> = client.get("/api/v1/workspaces").await?;
+    if !available
+        .iter()
+        .any(|item| item.id == workspace_id && item.can_read)
+    {
+        return Err(error(
+            "workspace is not readable by this authenticated account",
+        ));
+    }
+    Ok(VerifiedWorkspace {
+        origin: client.base.as_str().to_owned(),
+        user_id: identity.user_id,
+        device_id: identity.device_id,
+        workspace_id,
+    })
+}
+
 #[derive(Deserialize, serde::Serialize)]
 struct Project {
     id: Uuid,

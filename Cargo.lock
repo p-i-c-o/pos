@@ -1628,6 +1628,7 @@ dependencies = [
  "sqlx",
  "tempfile",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

@@ -39,3 +39,14 @@ in 0700 directories; explicit `--replace` is required for rotation.
 `pos remote logout` revokes remotely before deleting the local token.
 No secrets in arguments, logs or Git. These commands operate independently
 of SQLite. See docs/account-onboarding.md.
+
+## Local sync binding (PR #19)
+
+`pos sync bind` does two authenticated GET requests to verify the selected
+server workspace and device identity *before* opening/migrating SQLite.
+It then reserves a 0600 anchor under the private XDG config directory
+and inserts an immutable one-workspace binding. `pos sync status` is
+local read-only, checks the external anchor and must not migrate or create a
+database. Never auto-rebind, fabricate mappings, restore missing anchors,
+or enable network sync without a separately reviewed protocol.
+See docs/sync-identity-binding.md.
