@@ -51,6 +51,12 @@ jobs:
       - name: Test SQLite offline change journal and migration recovery
         run: cargo test -p pos-sqlite --test sync_journal --locked -- --nocapture
 
+      - name: Test SQLite sync identity binding, version mapping and recovery
+        run: cargo test -p pos-sqlite --test sync_identity --locked -- --nocapture
+
+      - name: Test CLI workspace binding and database clone fencing
+        run: cargo test -p pos-cli --test sync_binding --locked -- --nocapture
+
       - name: Test PostgreSQL connection, concurrency and migrations
         env:
           POS_TEST_DATABASE_URL: postgres://pos_ci:pos_ci_ephemeral_only@127.0.0.1:5432/pos_ci?sslmode=disable
