@@ -11,7 +11,8 @@ pos-permissions = { path = "../../core/pos-permissions" }
 pos-projects = { path = "../../modules/pos-projects" }
 pos-tasks = { path = "../../modules/pos-tasks" }
 serde = { version = "1", features = ["derive"] }
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid"] }
+serde_json = "1"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros", "uuid", "json"] }
 tokio = { version = "1", features = ["rt"] }
 uuid = { version = "1", features = ["serde"] }
 zeroize = "1.9.1"

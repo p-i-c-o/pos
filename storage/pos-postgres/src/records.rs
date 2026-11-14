@@ -22,7 +22,7 @@ const READ_SCOPE: &str = "EXISTS (
     WHERE w.id = $2
       AND (w.owner_user_id = $1 OR (w.kind = 'shared' AND m.role IN ('viewer', 'editor')))
 )";
-const WRITE_SCOPE: &str = "EXISTS (
+pub(crate) const WRITE_SCOPE: &str = "EXISTS (
     SELECT 1 FROM pos_workspaces w
     JOIN pos_users actor ON actor.id = $1 AND actor.disabled_at IS NULL
     LEFT JOIN pos_workspace_members m ON m.workspace_id = w.id AND m.user_id = $1

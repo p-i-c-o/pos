@@ -4,6 +4,7 @@
 
 mod onboarding;
 mod records;
+mod sync;
 
 use axum::{
     Json, Router,
@@ -194,6 +195,11 @@ pub(crate) fn routes(store: PostgresStore) -> Router {
         )
         .route("/api/v1/workspaces", get(workspaces))
         .route("/api/v1/workspaces/{id}", get(workspace))
+        .route("/api/v1/workspaces/{id}/sync/changes", get(sync::changes))
+        .route(
+            "/api/v1/workspaces/{id}/sync/operations",
+            axum::routing::post(sync::apply).layer(axum::extract::DefaultBodyLimit::max(65536)),
+        )
         .route(
             "/api/v1/workspaces/{id}/projects",
             get(records::list_projects).post(records::create_project),

@@ -5,9 +5,13 @@
 
 mod auth;
 mod records;
+mod sync;
+mod sync_ops;
 mod workspaces;
 pub use auth::{Identity, IdentityError, Login};
 pub use records::{CreateTaskRecord, ProjectRecord, RecordError, TaskChanges, TaskRecord};
+pub use sync::{SyncChange, SyncPage};
+pub use sync_ops::{SyncOperationError, SyncReceipt};
 pub use workspaces::{Workspace, WorkspaceError};
 
 use std::{error::Error, fmt, str::FromStr, time::Duration};

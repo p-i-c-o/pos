@@ -461,6 +461,166 @@ async fn workspace_records_are_scoped_versioned_and_validated() {
     assert_eq!(request(addr, "DELETE", &p_path, Some(a), None).await.0, 405);
     assert_eq!(request(addr, "DELETE", &t_path, Some(a), None).await.0, 405);
 
+    // Server change feed reflects committed project/task writes in cursor order.
+    let feed = format!("/api/v1/workspaces/{private}/sync/changes");
+    assert_eq!(request(addr, "GET", &feed, None, None).await.0, 401);
+    assert_eq!(request(addr, "GET", &feed, Some(b), None).await.0, 404);
+    assert_eq!(
+        request(addr, "GET", &format!("{feed}?after=-1"), Some(a), None)
+            .await
+            .0,
+        400
+    );
+    assert_eq!(
+        request(addr, "GET", &format!("{feed}?limit=101"), Some(a), None)
+            .await
+            .0,
+        400
+    );
+    let (status, first) = request(addr, "GET", &format!("{feed}?limit=1"), Some(a), None).await;
+    assert_eq!(status, 200, "{first}");
+    assert_eq!(first["changes"].as_array().unwrap().len(), 1);
+    assert_eq!(first["has_more"], true);
+    assert_eq!(first["changes"][0]["record_kind"], "project");
+    assert_eq!(first["changes"][0]["record_id"], project.to_string());
+    let cursor = first["next_cursor"].as_i64().unwrap();
+    let (status, tail) = request(
+        addr,
+        "GET",
+        &format!("{feed}?after={cursor}"),
+        Some(a),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{tail}");
+    assert!(tail["changes"].as_array().unwrap().len() >= 2);
+    assert_eq!(tail["has_more"], false);
+    let records = tail["changes"].as_array().unwrap();
+    assert!(
+        records
+            .windows(2)
+            .all(|pair| pair[0]["cursor"].as_i64() < pair[1]["cursor"].as_i64())
+    );
+    assert_eq!(records.last().unwrap()["data"]["archived"], true);
+    assert_eq!(records.last().unwrap()["revision"], 3);
+
+    // PR #20: applying the same device operation twice is safe, even
+    // concurrently; a mismatched replay cannot perform a second write.
+    let operations = format!("/api/v1/workspaces/{private}/sync/operations");
+    let op = Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap();
+    let create = json!({
+        "operation_id": op,
+        "change": {"type":"create_project","name":"Idempotency check"}
+    });
+    assert_eq!(
+        request(addr, "POST", &operations, None, Some(&create))
+            .await
+            .0,
+        401
+    );
+    assert_eq!(
+        request(addr, "POST", &operations, Some(b), Some(&create))
+            .await
+            .0,
+        404
+    );
+    let (left, right) = tokio::join!(
+        request(addr, "POST", &operations, Some(a), Some(&create)),
+        request(addr, "POST", &operations, Some(a), Some(&create))
+    );
+    assert_eq!(left.0, 200, "{}", left.1);
+    assert_eq!(right.0, 200, "{}", right.1);
+    assert_eq!(left.1, right.1);
+    assert_eq!(left.1["revision"], 1);
+    let added_project = left.1["record_id"].as_str().unwrap();
+    let mismatched = json!({
+        "operation_id": op,
+        "change": {"type":"create_project","name":"Malicious replay"}
+    });
+    assert_eq!(
+        request(addr, "POST", &operations, Some(a), Some(&mismatched))
+            .await
+            .0,
+        409
+    );
+
+    let update_id = Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap();
+    let stale = json!({
+        "operation_id": update_id,
+        "change": {"type":"update_project","record_id":added_project,
+                   "expected_version":2,"name":"Stale write"}
+    });
+    assert_eq!(
+        request(addr, "POST", &operations, Some(a), Some(&stale))
+            .await
+            .0,
+        409
+    );
+    let valid = json!({
+        "operation_id": update_id,
+        "change": {"type":"update_project","record_id":added_project,
+                   "expected_version":1,"name":"Updated exactly once"}
+    });
+    let (status, receipt) = request(addr, "POST", &operations, Some(a), Some(&valid)).await;
+    assert_eq!(status, 200, "{receipt}");
+    assert_eq!(receipt["revision"], 2);
+    assert_eq!(
+        request(addr, "POST", &operations, Some(a), Some(&valid))
+            .await
+            .1,
+        receipt
+    );
+    let (status, current) = request(
+        addr,
+        "GET",
+        &format!("{a_projects}/{added_project}"),
+        Some(a),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(current["version"], 2);
+    assert_eq!(current["name"], "Updated exactly once");
+
+    // Task creation, project mapping and nullable edits use the same
+    // transactional receipt path. A rejected operation leaves no receipt.
+    let task_op = Uuid::parse_str("33333333-3333-4333-8333-333333333333").unwrap();
+    let invalid_task = json!({
+        "operation_id": task_op,
+        "change": {"type":"create_task","title":"Bad","priority":"invalid"}
+    });
+    assert_eq!(
+        request(addr, "POST", &operations, Some(a), Some(&invalid_task))
+            .await
+            .0,
+        400
+    );
+    let task_creation = json!({
+        "operation_id": task_op,
+        "change": {"type":"create_task","title":"Sync task",
+                   "project_id":added_project,"description":"some notes","due_date":"2026-12-17"}
+    });
+    let (status, new_task) =
+        request(addr, "POST", &operations, Some(a), Some(&task_creation)).await;
+    assert_eq!(status, 200, "{new_task}");
+    assert_eq!(new_task["record_kind"], "task");
+    let task_id = new_task["record_id"].as_str().unwrap();
+    let task_update = json!({
+        "operation_id": Uuid::parse_str("44444444-4444-4444-8444-444444444444").unwrap(),
+        "change": {"type":"update_task","record_id":task_id,"expected_version":1,
+                   "description":null,"due_date":null,"status":"completed"}
+    });
+    let (status, updated_task) =
+        request(addr, "POST", &operations, Some(a), Some(&task_update)).await;
+    assert_eq!(status, 200, "{updated_task}");
+    assert_eq!(updated_task["revision"], 2);
+    let (status, task_record) =
+        request(addr, "GET", &format!("{a_tasks}/{task_id}"), Some(a), None).await;
+    assert_eq!(status, 200, "{task_record}");
+    assert_eq!(task_record["description"], Value::Null);
+    assert_eq!(task_record["due_date"], Value::Null);
+    assert_eq!(task_record["status"], "completed");
+
     // After token revocation, even read operations fail.
     assert!(store.revoke_token(a).await.unwrap());
     assert_eq!(request(addr, "GET", &a_tasks, Some(a), None).await.0, 401);

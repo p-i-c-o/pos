@@ -17,3 +17,10 @@ PR #18 uses pos-entities LocalRecordId and defines typed pending changes and a p
 comparison. It does not implement transport, server mapping,
 acknowledgements, conflict resolution, persistence or remote uploads.
 Never infer successful sync from queued events. See docs/sync-foundations.md.
+
+## PR #20 server-side protocol
+
+Server PostgreSQL now stores a transactional incremental change feed and
+per-device operation receipts, with authenticated GET/POST loopback endpoints.
+Client queue draining, automatic upload/download and delete/tombstone handling
+are not implemented. See docs/server-sync-protocol.md.
